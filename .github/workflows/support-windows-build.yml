@@ -17,6 +17,7 @@ on:
   push:
     branches:
       - support
+      - test/lab-rendezvous
     paths-ignore:
       - "docs/**"
       - "**/*.md"
