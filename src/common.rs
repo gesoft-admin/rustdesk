@@ -2174,7 +2174,9 @@ pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbo
 
 #[inline]
 pub fn using_public_server() -> bool {
-    crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
+    // Must reflect the rendezvous server actually in use, including the
+    // compiled-in `RENDEZVOUS_SERVERS` fallback, which a custom build overrides.
+    is_public(&Config::get_rendezvous_server())
 }
 
 pub struct ThrottledInterval {
@@ -3040,6 +3042,25 @@ mod tests {
         assert!(!is_public("hello-rustdesk.com"));
         assert!(!is_public("api.rustdesk.com.evil.test"));
         assert!(!is_public("https://rustdesk.com@evil.test"));
+    }
+
+    #[test]
+    fn test_using_public_server_uses_effective_rendezvous_server() {
+        // `using_public_server()` classifies the rendezvous server actually in use,
+        // so every source that can supply it must classify correctly.
+
+        // Public upstream: the compiled fallback resolves to a rustdesk.com host.
+        assert!(is_public("rs-ny.rustdesk.com:21116"));
+        assert!(is_public("rs-sg.rustdesk.com:21116"));
+
+        // Custom compiled fallback: this build must never be seen as public.
+        for s in config::RENDEZVOUS_SERVERS {
+            assert!(!is_public(s), "compiled rendezvous server {s} must not be public");
+        }
+
+        // Explicit custom rendezvous (filename config or `custom-rendezvous-server`).
+        assert!(!is_public("rendezvous.example.com:21116"));
+        assert!(!is_public("192.168.1.10:21116"));
     }
 
     #[test]
