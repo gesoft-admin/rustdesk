@@ -200,9 +200,15 @@ jobs:
         shell: bash
         run: |
           sed -i '/dpiAware/d' res/manifest.xml
+          # The self-extractor names its target directory after the payload
+          # executable's stem (libs/portable app_dir_name), so packing rustdesk.exe
+          # would extract into %LOCALAPPDATA%\rustdesk and wipe a customer's own
+          # portable RustDesk there. Rename the payload exe so extraction lands in
+          # its own namespace (%LOCALAPPDATA%\gesoftsupport) instead.
+          mv ./rustdesk/rustdesk.exe ./rustdesk/GesoftSupport.exe
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/GesoftSupport.exe
           popd
           mkdir -p ./dist
           mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-${{ env.VERSION }}-x86_64-portable.exe
