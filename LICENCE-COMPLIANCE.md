@@ -8,6 +8,37 @@ The work as a whole is distributed under the GNU Affero General Public License
 v3.0, in `LICENCE` at the root of this repository. Where a component is silent
 about its own licence, the section below says what we do about it and why.
 
+## Distributing the binaries
+
+We serve compiled Windows builds of this tree to customers, over the web, from
+our own helpdesk service. That is *conveying* object code under AGPL-3.0, and
+it carries two obligations that the licence text alone does not discharge.
+
+**§5(a) — say that you modified it, and when.** `CHANGES-GESOFT.md` at the root
+of this repository lists every change this fork and our `hbb_common` fork make
+to upstream, with dates, and states that nothing else is changed. The two
+source files we actually modified — `src/common.rs` and
+`libs/hbb_common/src/config.rs` — each carry a short notice at the top pointing
+at it, so a reader who opens only the file still sees it.
+
+**§6 — tell the recipient where the source is.** Publishing the fork is not by
+itself enough: the person receiving the binary has to be told. So the offer
+appears where the binary is actually handed over, in the customer's own
+language:
+
+* On the download page they click, as a footer naming RustDesk, the AGPL-3.0,
+  and `github.com/gesoft-admin/rustdesk`.
+* In the support tool's own window, printed under the banner before anything
+  else happens, because a customer may keep the executable and not the page.
+
+Neither is a repository link buried in documentation the customer would never
+open. If either is removed, the obligation is not met.
+
+**Keeping the offer true.** The source we point at has to be the source that
+built the binary the customer received. That is why builds are pinned by
+sha256 alongside the commits they came from, and why the pin does not move for
+a documentation change — see the note on the gitlink below.
+
 ## `hbb_common`
 
 In this tree, `hbb_common` is consumed as a Git submodule at `libs/hbb_common`

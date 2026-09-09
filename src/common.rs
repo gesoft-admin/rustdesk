@@ -1,3 +1,8 @@
+// Modified by Gesoft on 2026-09-06: `check_software_update` no longer contacts
+// the public RustDesk update endpoint on a self-hosted build, and
+// `using_public_server` classifies the rendezvous server actually in use.
+// See CHANGES-GESOFT.md at the root of this repository. (AGPL-3.0 §5(a))
+
 use std::{
     collections::HashMap,
     future::Future,
