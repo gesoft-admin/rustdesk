@@ -119,11 +119,44 @@ do not treat it as zlib by analogy:
   the author. A fully commercial version is available for users who do not wisth [sic]
   to see those advertisements." This is a term our customers accept when the
   virtual display is used, so it is a disclosure obligation, not just a
-  copyright one. It is also a standing reason to check whether the feature is
-  reachable at all in the support client before assuming the clause is inert.
+  copyright one — so we checked whether our client can reach it at all. It
+  cannot, as it is configured and run; see below.
 
 Clause 3 forbids removing or altering the notice from any distribution, which
 is why `License.txt` ships beside the driver and must keep shipping there.
+
+### Whether the advertising clause can be triggered by our client
+
+Read from the source at `5cd67169`, not observed on Windows. Three independent
+reasons, any one of which is sufficient:
+
+1. **The driver cannot be installed without administrator rights.**
+   `amyuni_idd::check_install_driver` tries `deviceinstaller64.exe` first, which
+   our artifact does not contain — the packed `usbmmidd_v2` directory holds only
+   `usbmmIdd.inf`, `usbmmidd.cat`, `x64/usbmmIdd.dll`, `idd_instructions.txt`
+   and `License.txt`. It then falls back to installing the `.inf` through
+   SetupAPI, which requires elevation. Our session is attended, portable and
+   unelevated: the customer presses the plain **Accept**, not "Accept and
+   elevate". The call fails and is logged.
+2. **Nothing in our flow asks for a virtual display.** `plug_in_headless` runs
+   only when the machine reports no displays at all, which is not a customer
+   laptop; `plug_in_monitor` runs only when an operator explicitly requests an
+   extra display.
+3. **The capability is never advertised.** `get_platform_additions` returns
+   early unless `is_self_service_running()`, which checks for a Windows service
+   named after `APP_NAME` — `GesoftSupport`. Our client is portable and installs
+   no service, so the operator's client is never told virtual displays are
+   available.
+
+One case escapes all three: a customer whose machine **already** has the Amyuni
+driver installed by some other product. There `check_install_driver` returns
+early and the existing driver is used. That customer accepted Amyuni's terms
+when they installed it, independently of us.
+
+None of this reduces the redistribution obligation. We ship the files, so
+`License.txt` must keep travelling with them and the acknowledgment below
+stands. If the support client ever gains an elevated or installed mode, this
+conclusion has to be re-checked before it ships.
 
 ### Acknowledgment
 
