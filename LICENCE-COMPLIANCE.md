@@ -10,10 +10,11 @@ about its own licence, the section below says what we do about it and why.
 
 ## `hbb_common`
 
-`hbb_common` is consumed as a Git submodule at `libs/hbb_common`, and inside
-Cargo as a path dependency and workspace member — never as a separately
-published crate. It is compiled into the binaries this repository produces and
-is distributed only as part of them.
+In this tree, `hbb_common` is consumed as a Git submodule at `libs/hbb_common`
+and, inside Cargo, as a path dependency and workspace member. In our builds and
+distributions it is compiled into the RustDesk binaries this repository
+produces, and we do not distribute it as a standalone product. That is a
+statement about how we use it, not about `hbb_common` in general.
 
 **The observed facts, as of 2026-09-09:**
 
