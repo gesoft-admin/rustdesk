@@ -10,5 +10,5 @@ ImageProvider? image(String asset) {
   final dir = Platform.environment['RUSTDESK_BRAND_DIR'];
   if (dir == null || dir.isEmpty) return null;
   final file = File('$dir${Platform.pathSeparator}$asset.png');
-  return file.isFileSync() ? FileImage(file) : null;
+  return file.existsSync() ? FileImage(file) : null;
 }

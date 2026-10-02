@@ -34,7 +34,7 @@ class DesktopHomePage extends StatefulWidget {
 }
 
 final borderColor = MyTheme.hasBrandAccent
-    ? MyTheme.accent
+    ? MyTheme.runtimeAccent
     : const Color(0xFF2F65BA);
 
 class _DesktopHomePageState extends State<DesktopHomePage>

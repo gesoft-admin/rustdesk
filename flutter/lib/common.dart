@@ -262,9 +262,10 @@ class MyTheme {
 
   static final bool hasBrandAccent = brand.accent() != null;
   static const Color grayBg = Color(0xFFEFEFF2);
-  static final Color accent = _brandAccent();
-  static final Color accent50 = accent.withAlpha(0x77);
-  static final Color accent80 = accent.withAlpha(0xAA);
+  static const Color accent = Color(0xFF0071FF);
+  static const Color accent50 = Color(0x770071FF);
+  static const Color accent80 = Color(0xAA0071FF);
+  static final Color runtimeAccent = _brandAccent();
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
   static const Color idColor = Color(0xFF00B6F0);
@@ -442,7 +443,7 @@ class MyTheme {
         : mobileTextButtonTheme,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: MyTheme.accent,
+        backgroundColor: MyTheme.runtimeAccent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8.0),
         ),
@@ -465,8 +466,8 @@ class MyTheme {
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
-        primary: hasBrandAccent ? accent : Colors.blue,
-        secondary: accent, background: grayBg),
+        primary: hasBrandAccent ? runtimeAccent : Colors.blue,
+        secondary: runtimeAccent, background: grayBg),
     popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         shape: RoundedRectangleBorder(
@@ -546,7 +547,7 @@ class MyTheme {
         : mobileTextButtonTheme,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: MyTheme.accent,
+        backgroundColor: MyTheme.runtimeAccent,
         foregroundColor: Colors.white,
         disabledForegroundColor: Colors.white70,
         disabledBackgroundColor: Colors.white10,
@@ -574,8 +575,8 @@ class MyTheme {
         style: MenuStyle(
             backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
     colorScheme: ColorScheme.dark(
-      primary: hasBrandAccent ? accent : Colors.blue,
-      secondary: accent,
+      primary: hasBrandAccent ? runtimeAccent : Colors.blue,
+      secondary: runtimeAccent,
       background: Color(0xFF24252B),
     ),
     popupMenuTheme: PopupMenuThemeData(
