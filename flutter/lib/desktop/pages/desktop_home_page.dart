@@ -1,3 +1,4 @@
+// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
@@ -32,7 +33,9 @@ class DesktopHomePage extends StatefulWidget {
   State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
 
-const borderColor = Color(0xFF2F65BA);
+final borderColor = MyTheme.hasBrandAccent
+    ? MyTheme.accent
+    : const Color(0xFF2F65BA);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {

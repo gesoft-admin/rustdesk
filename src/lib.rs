@@ -1,3 +1,4 @@
+// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 mod keyboard;
 /// cbindgen:ignore
 pub mod platform;
@@ -41,6 +42,8 @@ mod auth_2fa;
 mod clipboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod core_main;
+#[cfg(all(windows, feature = "gesoft-support"))]
+mod gesoft_support;
 mod custom_server;
 mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

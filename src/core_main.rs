@@ -1,3 +1,4 @@
+// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use crate::client::translate;
 #[cfg(not(debug_assertions))]
@@ -29,6 +30,14 @@ macro_rules! my_println{
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    #[cfg(all(windows, feature = "gesoft-support"))]
+    let support_code = match crate::gesoft_support::prepare() {
+        Ok(code) => code,
+        Err(error) => {
+            crate::platform::message_box(&error);
+            return None;
+        }
+    };
     if !crate::common::global_init() {
         return None;
     }
@@ -166,6 +175,10 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
+    #[cfg(all(windows, feature = "gesoft-support"))]
+    if let Some(code) = support_code {
+        crate::gesoft_support::start(code);
+    }
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]

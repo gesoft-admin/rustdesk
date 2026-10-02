@@ -1,3 +1,4 @@
+// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 #![windows_subsystem = "windows"]
 
 use std::{
@@ -8,6 +9,8 @@ use std::{
 use bin_reader::{normalize_path, BinaryReader};
 
 pub mod bin_reader;
+#[cfg(all(windows, feature = "gesoft-support"))]
+mod gesoft_support;
 #[cfg(windows)]
 mod ui;
 
@@ -270,6 +273,15 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
 }
 
 fn main() -> Result<(), String> {
+    #[cfg(all(windows, feature = "gesoft-support"))]
+    {
+        if let Some(code) = gesoft_support::session_code() {
+            return gesoft_support::run(&code);
+        }
+        if !gesoft_support::is_technician_executable() {
+            return gesoft_support::missing_session();
+        }
+    }
     let mut args = Vec::new();
     let mut arg_exe = Default::default();
     let mut i = 0;

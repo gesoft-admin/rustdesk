@@ -1,3 +1,4 @@
+// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -45,6 +46,8 @@ import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
 import 'package:flutter_hbb/native/common.dart'
     if (dart.library.html) 'package:flutter_hbb/web/common.dart';
+import 'package:flutter_hbb/native/brand.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/brand.dart' as brand;
 import 'package:flutter_hbb/utils/http_service.dart' as http;
 
 final globalKey = GlobalKey<NavigatorState>();
@@ -245,13 +248,23 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   }
 }
 
+Color _brandAccent() {
+  final value = brand.accent();
+  if (value != null && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(value)) {
+    final rgb = int.tryParse(value.substring(1), radix: 16);
+    if (rgb != null) return Color(0xFF000000 | rgb);
+  }
+  return const Color(0xFF0071FF);
+}
+
 class MyTheme {
   MyTheme._();
 
+  static final bool hasBrandAccent = brand.accent() != null;
   static const Color grayBg = Color(0xFFEFEFF2);
-  static const Color accent = Color(0xFF0071FF);
-  static const Color accent50 = Color(0x770071FF);
-  static const Color accent80 = Color(0xAA0071FF);
+  static final Color accent = _brandAccent();
+  static final Color accent50 = accent.withAlpha(0x77);
+  static final Color accent80 = accent.withAlpha(0xAA);
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
   static const Color idColor = Color(0xFF00B6F0);
@@ -452,7 +465,8 @@ class MyTheme {
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
-        primary: Colors.blue, secondary: accent, background: grayBg),
+        primary: hasBrandAccent ? accent : Colors.blue,
+        secondary: accent, background: grayBg),
     popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         shape: RoundedRectangleBorder(
@@ -560,7 +574,7 @@ class MyTheme {
         style: MenuStyle(
             backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
     colorScheme: ColorScheme.dark(
-      primary: Colors.blue,
+      primary: hasBrandAccent ? accent : Colors.blue,
       secondary: accent,
       background: Color(0xFF24252B),
     ),
@@ -3795,6 +3809,15 @@ class _LogoState extends State<_Logo> {
 
   @override
   Widget build(BuildContext context) {
+    final image = brand.image(Theme.of(context).brightness == Brightness.dark
+        ? 'logo_dark'
+        : 'logo_light');
+    if (image != null) {
+      return Container(
+        constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
+        child: Image(image: image, fit: BoxFit.contain),
+      ).marginOnly(left: 12, right: 12, top: 12);
+    }
     return FutureBuilder<String?>(
       future: _logoFutureFor(Theme.of(context).brightness),
       builder: (BuildContext context, AsyncSnapshot<String?> snapshot) {
@@ -3822,6 +3845,8 @@ class _LogoState extends State<_Logo> {
 Widget loadLogo() => const _Logo();
 
 Widget loadIcon(double size) {
+  final image = brand.image('icon');
+  if (image != null) return Image(image: image, width: size, height: size);
   return Image.asset('assets/icon.png',
       width: size,
       height: size,
@@ -4186,6 +4211,10 @@ List<String> getPrinterNames() {
 
 String _appName = '';
 String get appName {
+  final brandName = brand.name();
+  if (isWindows && brandName != null && brandName.isNotEmpty) {
+    return brandName;
+  }
   if (_appName.isEmpty) {
     _appName = bind.mainGetAppNameSync();
   }

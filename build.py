@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 
 import os
 import glob
@@ -314,6 +315,8 @@ def linux_packaging_branch():
 
 def get_features(args):
     features = ['inline'] if not args.flutter else []
+    if args.flutter and os.environ.get('GESOFT_SUPPORT_API_BASE'):
+        features.append('gesoft-support')
     if args.hwcodec:
         features.append('hwcodec')
     if args.vram:

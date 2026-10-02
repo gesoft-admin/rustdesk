@@ -16,10 +16,20 @@ it carries two obligations that the licence text alone does not discharge.
 
 **§5(a) — say that you modified it, and when.** `CHANGES-GESOFT.md` at the root
 of this repository lists every change this fork and our `hbb_common` fork make
-to upstream, with dates, and states that nothing else is changed. The two
-source files we actually modified — `src/common.rs` and
-`libs/hbb_common/src/config.rs` — each carry a short notice at the top pointing
-at it, so a reader who opens only the file still sees it.
+to upstream, with dates, and states that nothing else is changed. The
+source files we modified — `src/common.rs`, `src/lib.rs`,
+`src/core_main.rs`, `build.py`, `flutter/lib/common.dart`,
+`flutter/lib/desktop/pages/desktop_home_page.dart`,
+`flutter/windows/runner/main.cpp`, `libs/portable/src/main.rs`,
+`libs/portable/generate.py`, and `libs/hbb_common/src/config.rs` — each carry
+a short notice at the top pointing at it. The added `src/gesoft_support.rs`,
+`libs/portable/src/gesoft_support.rs`, `flutter/lib/native/brand.dart` and
+`flutter/lib/web/brand.dart` carry the same notice.
+
+GeSoft symbols are kept in a separately configured Helpdesk asset directory.
+They are fetched at session runtime and are absent from this source tree and
+the portable executable. The source-code offer concerns the RustDesk code;
+it does not grant rights to the separately supplied brand artwork.
 
 **§6 — tell the recipient where the source is.** Publishing the fork is not by
 itself enough: the person receiving the binary has to be told. So the offer
@@ -28,11 +38,9 @@ language:
 
 * On the download page they click, as a footer naming RustDesk, the AGPL-3.0,
   and `github.com/gesoft-admin/rustdesk`.
-* In the support tool's own window, printed under the banner before anything
-  else happens, because a customer may keep the executable and not the page.
 
-Neither is a repository link buried in documentation the customer would never
-open. If either is removed, the obligation is not met.
+The download page is shown before the customer receives the executable. The
+portable packer no longer opens a separate guidance window.
 
 **Keeping the offer true.** The source we point at has to be the source that
 built the binary the customer received. That is why builds are pinned by

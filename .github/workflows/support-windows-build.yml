@@ -14,6 +14,12 @@ name: Support Windows x64 Build
 
 on:
   workflow_dispatch:
+    inputs:
+      support_api_base:
+        description: Helpdesk API base embedded in the test build
+        required: false
+        default: https://helpdesk.gesoft.ro
+        type: string
   push:
     branches:
       - support
@@ -28,6 +34,7 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VERSION: "1.5.0"
+  GESOFT_SUPPORT_API_BASE: ${{ inputs.support_api_base || 'https://helpdesk.gesoft.ro' }}
 
 jobs:
   generate-bridge:

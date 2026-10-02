@@ -1,3 +1,4 @@
+// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <tchar.h>
@@ -87,6 +88,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     if (get_rustdesk_app_name(app_name_buffer, 512) == 0) {
       app_name = std::wstring(app_name_buffer);
     }
+  }
+  wchar_t brand_name[128] = {0};
+  DWORD brand_name_len = GetEnvironmentVariableW(L"RUSTDESK_BRAND_NAME", brand_name, 128);
+  if (brand_name_len > 0 && brand_name_len < 128) {
+    app_name = brand_name;
   }
 
   // Uri links dispatch

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
 
 import os
 import optparse
@@ -89,6 +90,8 @@ def build_portable(output_folder: str, target: str):
     try:
         os.chdir(output_folder)
         cmd = ["cargo", "build", "--locked", "--release"]
+        if os.environ.get("GESOFT_SUPPORT_API_BASE"):
+            cmd.extend(["--features", "gesoft-support"])
         if target:
             cmd.extend(["--target", target])
         subprocess.run(cmd, check=True)

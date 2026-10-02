@@ -14,6 +14,42 @@ Modified by **Gesoft** — <https://github.com/gesoft-admin/rustdesk>.
 
 ## `rustdesk`
 
+### `libs/portable/src/gesoft_support.rs` — added 2026-10-02
+
+The Gesoft portable packer reads the code from the download name, extracts
+RustDesk, passes the code to it and removes only directories created by that
+run. It does not present a separate guidance or extraction window. The code is
+compiled only with the `gesoft-support` feature.
+
+### `src/gesoft_support.rs` — added 2026-10-02
+
+The Windows RustDesk application claims the session before startup, sets
+attended click approval, reports its ID and observes remote close. Its
+`gesoft-support` feature suppresses the installation offer for this temporary
+build. RustDesk's installer code remains available for a future installer
+build. Optional runtime branding is fetched from the Helpdesk session and
+written beside the extracted application; no GeSoft symbol is compiled into
+RustDesk.
+
+### `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/windows/runner/main.cpp` — modified 2026-10-02
+
+These read a runtime display name, accent colour, logo and icon from the
+session environment. With no brand configuration the existing application name,
+blue accent and generic artwork remain. The supporting platform-specific
+readers are new `flutter/lib/native/brand.dart` and `flutter/lib/web/brand.dart`.
+
+### `Cargo.toml`, `build.py`, `src/lib.rs`, `src/core_main.rs` — modified 2026-10-02
+
+These opt the RustDesk application into the support feature only when the
+Helpdesk API base is set at build time. The shared startup path has a thin
+feature-gated hook; builds without the feature follow the previous path.
+
+### `libs/portable/Cargo.toml`, `generate.py`, `src/main.rs`, build workflow — modified 2026-10-02
+
+These opt the portable packer into the support handoff when a Helpdesk API base
+is provided at build time. Builds without the feature continue through the
+upstream portable entry point.
+
 ### `src/common.rs` — modified 2026-09-06
 
 Two changes, both about one thing: a build compiled against a self-hosted
@@ -77,8 +113,8 @@ its own. It modifies no upstream code.
 
 ## Not modified
 
-No other file in either repository is changed — five files in `rustdesk` and
-one in `hbb_common`, as listed above.
+No other runtime code in either repository is changed beyond the files listed
+above. The build's exact dependency versions are recorded in `Cargo.lock`.
 
 Worth being precise about branding, since `APP_NAME` is a product string and
 changing it is a branding change: it is the only one. The icons, the artwork,
