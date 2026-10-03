@@ -220,6 +220,30 @@ jobs:
           mkdir -p ./dist
           mv ./target/release/rustdesk-portable-packer.exe ./dist/rustdesk-${{ env.VERSION }}-x86_64-portable.exe
 
+      - name: Mark and verify integrated support artifact
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          base = os.environ['GESOFT_SUPPORT_API_BASE'].encode('ascii')
+          dll = Path('rustdesk/librustdesk.dll').read_bytes()
+          if base not in dll:
+              raise SystemExit('RustDesk DLL lacks the selected support API address')
+          exe = Path('dist/rustdesk-${{ env.VERSION }}-x86_64-portable.exe')
+          data = exe.read_bytes()
+          marker = b'HELPDESK-API-BASE:' + base + b'\0'
+          if b'HELPDESK-API-BASE:' in data:
+              raise SystemExit('Portable executable already contains an API marker')
+          # The PE packer stores its compressed payload in a linked section.
+          # This constant trailer lets Helpdesk validate the portable file it
+          # serves without changing the payload or introducing a per-session hash.
+          exe.write_bytes(data + marker)
+          if not exe.read_bytes().endswith(marker):
+              raise SystemExit('Portable API marker verification failed')
+          PY
+
       - name: Upload unsigned artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
