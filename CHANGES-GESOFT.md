@@ -36,6 +36,10 @@ existing incoming-only mode (`conn-type = incoming`), which hides the outgoing
 connect panel and recent sessions and refuses outgoing connections. Without a
 support code the application is unchanged.
 
+Modified 2026-11-08: a claimed session also overrides RustDesk's existing
+`enable-audio` option to `N`, so the customer's audio is not sent to the
+operator (desktop or browser viewer). Without a support code it is unchanged.
+
 ### `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/windows/runner/main.cpp` — modified 2026-10-02
 
 These read a runtime display name, accent colour, logo and icon from the

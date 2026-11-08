@@ -2,7 +2,7 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use hbb_common::config::{Config, HARD_SETTINGS};
+use hbb_common::config::{Config, HARD_SETTINGS, OVERWRITE_SETTINGS};
 
 const API_BASE: &str = env!("GESOFT_SUPPORT_API_BASE");
 const CODE_ALPHABET: &[u8] = b"23456789ACDEFGHJKMNPQRTVWXYZ";
@@ -42,6 +42,12 @@ pub fn prepare() -> Result<Option<String>, String> {
         .write()
         .map_err(|e| e.to_string())?
         .insert("conn-type".into(), "incoming".into());
+    // Support sessions carry no sound: the operator neither needs nor gets the
+    // customer's audio, in the desktop or the browser viewer.
+    OVERWRITE_SETTINGS
+        .write()
+        .map_err(|e| e.to_string())?
+        .insert("enable-audio".into(), "N".into());
     load_brand(&client, &code)?;
     prepare_click_approval()?;
     Ok(Some(code))
