@@ -36,6 +36,12 @@ pub fn prepare() -> Result<Option<String>, String> {
         .and_then(reqwest::blocking::Response::error_for_status)
         .map_err(|e| format!("Sesiunea de suport nu a fost aprobată: {e}"))?;
 
+    // A support session only receives: RustDesk's incoming-only mode hides the
+    // outgoing connect panel and recent sessions, and refuses outgoing calls.
+    HARD_SETTINGS
+        .write()
+        .map_err(|e| e.to_string())?
+        .insert("conn-type".into(), "incoming".into());
     load_brand(&client, &code)?;
     prepare_click_approval()?;
     Ok(Some(code))

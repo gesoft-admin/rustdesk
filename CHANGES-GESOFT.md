@@ -31,6 +31,11 @@ build. Optional runtime branding is fetched from the Helpdesk session and
 written beside the extracted application; no GeSoft symbol is compiled into
 RustDesk.
 
+Modified 2026-11-08: once the session is claimed, it also sets RustDesk's
+existing incoming-only mode (`conn-type = incoming`), which hides the outgoing
+connect panel and recent sessions and refuses outgoing connections. Without a
+support code the application is unchanged.
+
 ### `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/windows/runner/main.cpp` — modified 2026-10-02
 
 These read a runtime display name, accent colour, logo and icon from the
