@@ -90,12 +90,12 @@ fn run_session(code: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     child.wait().map_err(|e| e.to_string())?;
     let mut cleanup_errors = Vec::new();
-    if let Err(error) = std::fs::remove_dir_all(&brand_dir) {
+    if let Err(error) = remove_dir_with_retry(&brand_dir) {
         cleanup_errors.push(format!("{}: {error}", brand_dir.display()));
     }
     for (preexisting, path) in [(local_existed, local), (roaming_existed, roaming)] {
         if !preexisting && path.exists() {
-            if let Err(error) = std::fs::remove_dir_all(&path) {
+            if let Err(error) = remove_dir_with_retry(&path) {
                 cleanup_errors.push(format!("{}: {error}", path.display()));
             }
         }
@@ -107,6 +107,21 @@ fn run_session(code: &str) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+// RustDesk's helper processes (connection manager, server) can outlive the
+// main process by a few seconds and keep the extracted DLLs open, so a single
+// attempt right after it exits fails. Retry quietly before reporting.
+fn remove_dir_with_retry(path: &std::path::Path) -> std::io::Result<()> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) if std::time::Instant::now() >= deadline => return Err(error),
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(500)),
+        }
+    }
 }
 
 #[cfg(test)]

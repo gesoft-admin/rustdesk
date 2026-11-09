@@ -21,6 +21,11 @@ RustDesk, passes the code to it and removes only directories created by that
 run. It does not present a separate guidance or extraction window. The code is
 compiled only with the `gesoft-support` feature.
 
+Modified 2026-11-09: cleanup after the session retries removing the extracted
+directories for up to 60 seconds, because RustDesk's helper processes can keep
+the DLLs open briefly after the main process exits; the error dialog appears
+only if removal still fails.
+
 ### `src/gesoft_support.rs` — added 2026-10-02
 
 The Windows RustDesk application claims the session before startup, sets
