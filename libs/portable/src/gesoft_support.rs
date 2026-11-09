@@ -89,6 +89,17 @@ fn run_session(code: &str) -> Result<(), String> {
         .spawn()
         .map_err(|e| e.to_string())?;
     child.wait().map_err(|e| e.to_string())?;
+    // The payload carries the HTTP client; with this argument it reports the
+    // close and exits before any UI. Done before cleanup so the technician
+    // learns at once instead of after the silence timeout.
+    let _ = Command::new(&payload)
+        .arg("--gesoft-support-closed")
+        .env("RUSTDESK_APPNAME", "GesoftSupport.exe")
+        .env("GESOFT_SUPPORT_CODE", code)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
     let mut cleanup_errors = Vec::new();
     if let Err(error) = remove_dir_with_retry(&brand_dir) {
         cleanup_errors.push(format!("{}: {error}", brand_dir.display()));

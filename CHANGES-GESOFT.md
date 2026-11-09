@@ -26,6 +26,10 @@ directories for up to 60 seconds, because RustDesk's helper processes can keep
 the DLLs open briefly after the main process exits; the error dialog appears
 only if removal still fails.
 
+Modified 2026-11-09: when RustDesk exits, the packer runs it once more with
+`--gesoft-support-closed` so the Helpdesk learns at once that the customer
+closed the session, before cleanup starts.
+
 ### `src/gesoft_support.rs` — added 2026-10-02
 
 The Windows RustDesk application claims the session before startup, sets
@@ -44,6 +48,10 @@ support code the application is unchanged.
 Modified 2026-11-08: a claimed session also overrides RustDesk's existing
 `enable-audio` option to `N`, so the customer's audio is not sent to the
 operator (desktop or browser viewer). Without a support code it is unchanged.
+
+Modified 2026-11-09: with `--gesoft-support-closed` and a support code in the
+environment, it reports the close to the Helpdesk (best effort, 5 s) and exits
+before starting anything else.
 
 ### `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/windows/runner/main.cpp` — modified 2026-10-02
 

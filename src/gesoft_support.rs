@@ -7,6 +7,9 @@ use hbb_common::config::{Config, HARD_SETTINGS, OVERWRITE_SETTINGS};
 const API_BASE: &str = env!("GESOFT_SUPPORT_API_BASE");
 const CODE_ALPHABET: &[u8] = b"23456789ACDEFGHJKMNPQRTVWXYZ";
 const CODE_ENV: &str = "GESOFT_SUPPORT_CODE";
+/// Passed by the portable packer once RustDesk has exited: report the
+/// customer's close to the helpdesk and exit, without starting anything.
+pub const CLOSED_ARG: &str = "--gesoft-support-closed";
 
 pub fn prepare() -> Result<Option<String>, String> {
     // This build is attended-only. Keep RustDesk's installer code available for
@@ -16,7 +19,11 @@ pub fn prepare() -> Result<Option<String>, String> {
         .map_err(|e| e.to_string())?
         .insert("disable-installation".into(), "Y".into());
 
-    if std::env::args_os().nth(1).is_some() {
+    if let Some(first) = std::env::args_os().nth(1) {
+        if first == CLOSED_ARG {
+            notify_closed();
+            std::process::exit(0);
+        }
         return Ok(None);
     }
     let Ok(code) = std::env::var(CODE_ENV) else {
@@ -51,6 +58,25 @@ pub fn prepare() -> Result<Option<String>, String> {
     load_brand(&client, &code)?;
     prepare_click_approval()?;
     Ok(Some(code))
+}
+
+/// Best effort: if the helpdesk cannot be told, it still closes the session
+/// after the client's silence.
+fn notify_closed() {
+    let Ok(code) = std::env::var(CODE_ENV) else {
+        return;
+    };
+    if code.len() != 12 || !code.bytes().all(|b| CODE_ALPHABET.contains(&b)) {
+        return;
+    }
+    if let Ok(client) = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    {
+        let _ = client
+            .post(format!("{API_BASE}/api/support/{code}/close"))
+            .send();
+    }
 }
 
 fn load_brand(client: &reqwest::blocking::Client, code: &str) -> Result<(), String> {
