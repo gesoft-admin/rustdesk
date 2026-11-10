@@ -718,6 +718,8 @@ impl Connection {
                                 }
                             } else if &name == "file" {
                                 conn.file = enabled;
+                                #[cfg(all(windows, feature = "gesoft-support"))]
+                                crate::gesoft_support::note_file_permission(conn.inner.id(), enabled);
                                 conn.send_permission(Permission::File, enabled).await;
                                 #[cfg(feature = "unix-file-copy-paste")]
                                 if !enabled {
@@ -1023,6 +1025,13 @@ impl Connection {
                             } else {
                                 conn.send_remote_printing_disallowed().await;
                             }
+                        }
+                        // The remote control this file transfer joined has ended.
+                        #[cfg(all(windows, feature = "gesoft-support"))]
+                        ipc::Data::Close => {
+                            conn.send_close_reason_no_retry("").await;
+                            conn.on_close("remote control ended", true).await;
+                            break;
                         }
                         _ => {}
                     }
@@ -6827,6 +6836,8 @@ mod raii {
             // Clear per-connection state to avoid stale behavior if conn ids are reused.
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             clear_relative_mouse_active(self.0);
+            #[cfg(all(windows, feature = "gesoft-support"))]
+            crate::gesoft_support::end_joined_file_transfers(self.0, self.1);
             AUTHED_CONNS.lock().unwrap().retain(|c| c.conn_id != self.0);
             let remote_count = AUTHED_CONNS
                 .lock()

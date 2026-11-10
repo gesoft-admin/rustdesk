@@ -179,6 +179,10 @@ pub fn start(code: String) {
     });
 }
 
+/// Remote controls on which the customer switched File off in the connection
+/// manager: a file transfer does not join those, it asks for Accept.
+static CONTROLS_WITHOUT_FILES: std::sync::Mutex<Vec<i32>> = std::sync::Mutex::new(Vec::new());
+
 /// A file transfer that joins the remote control the customer accepted in the
 /// same viewer session is let in without a second Accept; see
 /// `gesoft_file_join.rs` for what binds the two.
@@ -189,6 +193,7 @@ pub fn file_transfer_joins_control(
     key: &crate::server::SessionKey,
 ) -> bool {
     use crate::server::{AuthConnType, AUTHED_CONNS};
+    let without_files = CONTROLS_WITHOUT_FILES.lock().unwrap().clone();
     let conns = AUTHED_CONNS.lock().unwrap();
     crate::gesoft_file_join::joins_accepted_control(
         is_file_transfer,
@@ -197,7 +202,50 @@ pub fn file_transfer_joins_control(
         key,
         conns
             .iter()
-            .filter(|c| c.conn_type == AuthConnType::Remote)
+            .filter(|c| c.conn_type == AuthConnType::Remote && !without_files.contains(&c.conn_id))
             .map(|c| &c.session_key),
     )
+}
+
+/// The customer's File switch on a connection in the connection manager.
+pub fn note_file_permission(conn_id: i32, enabled: bool) {
+    let mut off = CONTROLS_WITHOUT_FILES.lock().unwrap();
+    off.retain(|c| *c != conn_id);
+    if !enabled {
+        off.push(conn_id);
+    }
+}
+
+/// Called as an authorized connection goes. When it is the last remote
+/// control of its viewer session, the file transfers of that session end with
+/// it: they were let in because of it.
+pub fn end_joined_file_transfers(conn_id: i32, conn_type: crate::server::AuthConnType) {
+    use crate::server::{AuthConnType, AUTHED_CONNS};
+    CONTROLS_WITHOUT_FILES
+        .lock()
+        .unwrap()
+        .retain(|c| *c != conn_id);
+    if conn_type != AuthConnType::Remote {
+        return;
+    }
+    let conns = AUTHED_CONNS.lock().unwrap();
+    let Some(key) = conns
+        .iter()
+        .find(|c| c.conn_id == conn_id)
+        .map(|c| &c.session_key)
+    else {
+        return;
+    };
+    if conns.iter().any(|c| {
+        c.conn_id != conn_id && c.conn_type == AuthConnType::Remote && &c.session_key == key
+    }) {
+        return;
+    }
+    for c in conns
+        .iter()
+        .filter(|c| c.conn_type == AuthConnType::FileTransfer && &c.session_key == key)
+    {
+        hbb_common::log::info!("file transfer ends with the remote control");
+        c.sender.send(crate::ipc::Data::Close).ok();
+    }
 }

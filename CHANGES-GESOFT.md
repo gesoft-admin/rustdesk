@@ -59,18 +59,23 @@ of the same viewer session (same peer ID, name and non-zero session ID, which
 the viewer sends only inside the encrypted channel). The pure decision is in
 the new `src/gesoft_file_join.rs`, with tests that run on any host. Any other
 login, and a file transfer without such a control, still asks for Accept.
+A control on which the customer switched File off in the connection manager is
+not joined (Accept again), and when the last control of a viewer session ends,
+the file transfers of that session are closed with it.
 
 ### `src/server/connection.rs` — modified 2026-11-10
 
-One feature-gated hook in the click-approval branch of the login handler calls
-`gesoft_support::file_transfer_joins_control`; when it holds, the connection is
+Feature-gated hooks, all calling `gesoft_support`: in the click-approval branch
+of the login handler (`file_transfer_joins_control`), on the customer's File
+switch (`note_file_permission`), as an authorized connection is dropped
+(`end_joined_file_transfers`), and a `Close` arm on the authorized-connection
+channel that ends a joined file transfer. When the join holds, the connection is
 authorized as the customer's Accept of that control was (audited as a click,
 no 2FA prompt, `send_logon_response_and_keep_alive`), and the connection manager
 is told it is authorized, so the customer sees it and can disconnect it. A file
 transfer can join a control in the brief moment between its close and its
-removal from the list of authorized connections; the browser path is closed by
-the Helpdesk gateway, which ends the file transfer with the control. Builds
-without `gesoft-support` are unchanged.
+removal from the list of authorized connections; it is closed as that control
+is dropped. Builds without `gesoft-support` are unchanged.
 
 ### `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/windows/runner/main.cpp` — modified 2026-10-02
 
