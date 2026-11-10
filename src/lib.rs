@@ -44,6 +44,8 @@ mod clipboard;
 pub mod core_main;
 #[cfg(all(windows, feature = "gesoft-support"))]
 mod gesoft_support;
+#[cfg(all(windows, feature = "gesoft-support"))]
+mod gesoft_file_join;
 mod custom_server;
 mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -53,6 +53,25 @@ Modified 2026-11-09: with `--gesoft-support-closed` and a support code in the
 environment, it reports the close to the Helpdesk (best effort, 5 s) and exits
 before starting anything else.
 
+Modified 2026-11-10: `file_transfer_joins_control` lets a file-transfer login in
+without a second Accept when the customer has already accepted a remote control
+of the same viewer session (same peer ID, name and non-zero session ID, which
+the viewer sends only inside the encrypted channel). The pure decision is in
+the new `src/gesoft_file_join.rs`, with tests that run on any host. Any other
+login, and a file transfer without such a control, still asks for Accept.
+
+### `src/server/connection.rs` — modified 2026-11-10
+
+One feature-gated hook in the click-approval branch of the login handler calls
+`gesoft_support::file_transfer_joins_control`; when it holds, the connection is
+authorized as the customer's Accept of that control was (audited as a click,
+no 2FA prompt, `send_logon_response_and_keep_alive`), and the connection manager
+is told it is authorized, so the customer sees it and can disconnect it. A file
+transfer can join a control in the brief moment between its close and its
+removal from the list of authorized connections; the browser path is closed by
+the Helpdesk gateway, which ends the file transfer with the control. Builds
+without `gesoft-support` are unchanged.
+
 ### `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/windows/runner/main.cpp` — modified 2026-10-02
 
 These read a runtime display name, accent colour, logo and icon from the
@@ -65,6 +84,7 @@ readers are new `flutter/lib/native/brand.dart` and `flutter/lib/web/brand.dart`
 These opt the RustDesk application into the support feature only when the
 Helpdesk API base is set at build time. The shared startup path has a thin
 feature-gated hook; builds without the feature follow the previous path.
+`src/lib.rs` also declares `gesoft_file_join` under the same feature (2026-11-10).
 
 ### `libs/portable/Cargo.toml`, `generate.py`, `src/main.rs`, build workflow — modified 2026-10-02
 

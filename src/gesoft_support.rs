@@ -178,3 +178,26 @@ pub fn start(code: String) {
         }
     });
 }
+
+/// A file transfer that joins the remote control the customer accepted in the
+/// same viewer session is let in without a second Accept; see
+/// `gesoft_file_join.rs` for what binds the two.
+pub fn file_transfer_joins_control(
+    is_file_transfer: bool,
+    session_id: u64,
+    peer_id: &str,
+    key: &crate::server::SessionKey,
+) -> bool {
+    use crate::server::{AuthConnType, AUTHED_CONNS};
+    let conns = AUTHED_CONNS.lock().unwrap();
+    crate::gesoft_file_join::joins_accepted_control(
+        is_file_transfer,
+        session_id,
+        peer_id,
+        key,
+        conns
+            .iter()
+            .filter(|c| c.conn_type == AuthConnType::Remote)
+            .map(|c| &c.session_key),
+    )
+}

@@ -1,3 +1,4 @@
+// Modified by Gesoft, 2026-11-10. See CHANGES-GESOFT.md.
 #[cfg(target_os = "windows")]
 use super::login_failure_check::try_acquire_os_credential_login_gate;
 use super::login_failure_check::{
@@ -2858,6 +2859,23 @@ impl Connection {
             if (password::approve_mode() == ApproveMode::Click && !allow_logon_screen_password)
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
+                #[cfg(all(windows, feature = "gesoft-support"))]
+                if crate::gesoft_support::file_transfer_joins_control(
+                    self.file_transfer.is_some(),
+                    self.lr.session_id,
+                    &self.lr.my_id,
+                    &self.session_key(),
+                ) {
+                    log::info!("file transfer joins the accepted remote control");
+                    // As the customer's Accept of that control did.
+                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
+                    self.require_2fa.take();
+                    if !self.send_logon_response_and_keep_alive().await {
+                        return false;
+                    }
+                    self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
+                    return true;
+                }
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 if should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
                     if let Some(keep_alive) = self.prepare_terminal_login_for_authorization().await
