@@ -149,6 +149,16 @@ Flutter build, so the extracted `GesoftSupport.exe` says the same; version
 numbers, binary name and icons stay upstream's. Other builds are unchanged.
 `build.rs` also declares its inputs for Cargo's change detection.
 
+### `libs/portable/generate.py`, `src/bin_reader.rs`, support workflow — modified 2026-11-11
+
+`generate.py --stored` writes the payload uncompressed, behind an `rdpack02`
+header and a method byte; without the flag its output is byte-for-byte the
+previous Brotli blob. The reader recognises the header per blob and keeps the
+method on every entry, so an embedded payload and an `RDPKG` package may differ.
+The support workflow, after uploading the shipped artifact, packs the same
+payload this way into a separate artifact marked experimental, only to compare
+how antivirus heuristics treat the two; it cannot fail the job.
+
 ### `libs/portable/Cargo.toml`, `generate.py`, `src/main.rs`, build workflow — modified 2026-10-02
 
 These opt the portable packer into the support handoff when a Helpdesk API base

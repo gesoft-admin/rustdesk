@@ -15,6 +15,11 @@ encoding = 'utf-8'
 
 # output: {path: (compressed_data, file_md5)}
 
+# A stored blob starts with this header and a method byte, so the reader can tell
+# it from the legacy Brotli layout, which begins directly with "rustdesk".
+STORED_HEADER = b"rdpack02"
+METHOD_STORED = 0
+
 
 def normalize(path: str) -> str:
     path = path.replace('\\', '/')
@@ -23,7 +28,7 @@ def normalize(path: str) -> str:
     return path.lower()
 
 
-def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
+def generate_md5_table(folder: str, level, exclude: str = None, stored: bool = False) -> dict:
     res: dict = dict()
     skip = normalize(exclude) if exclude else None
     excluded = False
@@ -42,7 +47,7 @@ def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
             print(f"Processing {full_path}...")
             f = open(full_path, "rb")
             content = f.read()
-            content_compressed = brotli.compress(
+            content_compressed = content if stored else brotli.compress(
                 content, quality=level)
             md5_generator.update(content)
             md5_code = md5_generator.hexdigest().encode(encoding=encoding)
@@ -53,12 +58,15 @@ def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
     return res
 
 
-def write_package_metadata(md5_table: dict, output_folder: str, exe: str):
-    write_blob(md5_table, os.path.join(output_folder, "data.bin"), exe)
+def write_package_metadata(md5_table: dict, output_folder: str, exe: str, stored: bool = False):
+    write_blob(md5_table, os.path.join(output_folder, "data.bin"), exe, stored)
 
 
-def write_blob(md5_table: dict, output_path: str, exe: str):
+def write_blob(md5_table: dict, output_path: str, exe: str, stored: bool = False):
     with open(output_path, "wb") as f:
+        if stored:
+            f.write(STORED_HEADER)
+            f.write(bytes([METHOD_STORED]))
         f.write("rustdesk".encode(encoding=encoding))
         for path in md5_table.keys():
             (compressed_data, md5_code) = md5_table[path]
@@ -122,6 +130,8 @@ if __name__ == '__main__':
                       default=False,
                       help="omit the executable from the blob, for a template whose "
                            "executable ships in the package instead")
+    parser.add_option("--stored", dest="stored", action="store_true", default=False,
+                      help="store the files uncompressed, under the rdpack02 header")
     (options, args) = parser.parse_args()
     folder = options.folder or './rustdesk'
     output_folder = os.path.abspath(options.output_folder or './')
@@ -147,12 +157,12 @@ if __name__ == '__main__':
         exit(-1)
     exe = '.' + exe[len(folder_path):]
     print("Executable path: " + exe)
-    print("Compression level: " + str(options.level))
+    print("Compression: stored" if options.stored else "Compression level: " + str(options.level))
     md5_table = generate_md5_table(
-        folder, options.level, exe if options.exclude_exe else None)
+        folder, options.level, exe if options.exclude_exe else None, options.stored)
     if options.package:
-        write_blob(md5_table, os.path.abspath(options.package), exe)
+        write_blob(md5_table, os.path.abspath(options.package), exe, options.stored)
     else:
-        write_package_metadata(md5_table, output_folder, exe)
+        write_package_metadata(md5_table, output_folder, exe, options.stored)
         write_app_metadata(output_folder)
         build_portable(output_folder, options.target)

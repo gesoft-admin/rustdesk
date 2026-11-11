@@ -296,3 +296,70 @@ jobs:
           path: |
             dist
             rustdesk
+
+      # Experiment, not shipped: the same payload packed uncompressed, so the
+      # two executables can be scanned side by side by Defender. It runs after
+      # the real artifact is uploaded and cannot fail the job.
+      - name: Build stored (uncompressed) executable for comparison
+        id: stored
+        continue-on-error: true
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          pushd ./libs/portable
+          # --package writes data.bin only: app_metadata.toml keeps the shipped
+          # build's timestamp and no second cargo build starts from generate.py.
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/GesoftSupport.exe --stored --package data.bin
+          python3 -c 'import generate; generate.build_portable(".", None)'
+          popd
+          mkdir -p ./experimental
+          cp ./target/release/rustdesk-portable-packer.exe ./experimental/rustdesk-${{ env.VERSION }}-x86_64-portable-stored.exe
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          shipped = Path('dist/rustdesk-${{ env.VERSION }}-x86_64-portable.exe').read_bytes()
+          exe = Path('experimental/rustdesk-${{ env.VERSION }}-x86_64-portable-stored.exe')
+          data = exe.read_bytes()
+          if b'HELPDESK-API-BASE:' in data or b'HELPDESK-PROFILES:' in data:
+              raise SystemExit('Stored executable already contains a helpdesk marker')
+          if b'rdpack02\x00rustdesk' not in data:
+              raise SystemExit('Stored executable does not embed the stored payload')
+
+          # Every file decodes to exactly what the shipped build packs.
+          blob = Path('libs/portable/data.bin').read_bytes()
+          if blob[:9] != b'rdpack02\x00' or blob[9:17] != b'rustdesk':
+              raise SystemExit('data.bin is not a stored blob')
+          i, count = 17, 0
+          while blob[i:i + 8] != b'rustdesk':
+              n = int.from_bytes(blob[i:i + 4], 'big'); i += 4
+              path = blob[i:i + n].decode(); i += n
+              n = int.from_bytes(blob[i:i + 4], 'big'); i += 4
+              content = blob[i:i + n]; i += n
+              md5 = blob[i:i + 32].decode(); i += 32
+              if hashlib.md5(content).hexdigest() != md5:
+                  raise SystemExit(f'{path}: md5 mismatch')
+              if content != (Path('rustdesk') / path).read_bytes():
+                  raise SystemExit(f'{path}: differs from the payload')
+              count += 1
+          print(f'stored payload: {count} files verified')
+
+          # The same trailer the shipped build carries, byte for byte.
+          marker = shipped[shipped.index(b'HELPDESK-PROFILES:'):]
+          exe.write_bytes(data + marker)
+          data = exe.read_bytes()
+          if data.count(b'HELPDESK-PROFILES:') != 1 or not data.endswith(marker):
+              raise SystemExit('Stored executable marker verification failed')
+          for value in ('Gesoft Support', 'GesoftSupport.exe'):
+              if value.encode('utf-16-le') not in data:
+                  raise SystemExit(f'{exe} lacks the version string {value}')
+          for path, content in (('shipped', shipped), ('stored', data)):
+              print(f'{path}: {len(content)} bytes sha256 {hashlib.sha256(content).hexdigest()}')
+          PY
+
+      - name: Upload stored executable (experimental, not for release)
+        if: steps.stored.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-support-windows-x86_64-stored-experimental
+          path: experimental

@@ -19,6 +19,10 @@ const LENGTH: usize = 4;
 const IDENTIFIER: &[u8] = b"rustdesk";
 const IDENTIFIER_LENGTH: usize = 8;
 const MD5_LENGTH: usize = 32;
+// generate.py --stored: this header and a method byte precede the legacy layout.
+const STORED_HEADER: &[u8] = b"rdpack02";
+const METHOD_STORED: u8 = 0;
+const METHOD_BROTLI: u8 = 1;
 const BUF_SIZE: usize = 4096;
 
 pub(crate) struct BinaryData {
@@ -26,6 +30,7 @@ pub(crate) struct BinaryData {
     // compressed gzip data
     pub raw: &'static [u8],
     pub path: String,
+    pub stored: bool,
 }
 
 pub(crate) struct BinaryReader {
@@ -105,6 +110,15 @@ fn read_u32(blob: &[u8], at: usize) -> Option<u32> {
 fn parse(blob: &'static [u8]) -> Option<(Vec<BinaryData>, String)> {
     let mut base = 0usize;
     let mut parsed = Vec::new();
+    let mut stored = false;
+    if blob.get(..IDENTIFIER_LENGTH) == Some(STORED_HEADER) {
+        stored = match *blob.get(IDENTIFIER_LENGTH)? {
+            METHOD_STORED => true,
+            METHOD_BROTLI => false,
+            _ => return None,
+        };
+        base += IDENTIFIER_LENGTH + 1;
+    }
     if blob.get(base..base + IDENTIFIER_LENGTH)? != IDENTIFIER {
         return None;
     }
@@ -130,6 +144,7 @@ fn parse(blob: &'static [u8]) -> Option<(Vec<BinaryData>, String)> {
             md5_code,
             raw,
             path,
+            stored,
         });
     }
     let executable = std::str::from_utf8(blob.get(base..)?).ok()?.to_owned();
@@ -202,6 +217,9 @@ fn read_resource(name: &str) -> Option<&'static [u8]> {
 
 impl BinaryData {
     fn decompress(&self) -> Vec<u8> {
+        if self.stored {
+            return self.raw.to_vec();
+        }
         let cursor = Cursor::new(self.raw);
         let mut decoder = brotli::Decompressor::new(cursor, BUF_SIZE);
         let mut buf = Vec::new();
@@ -273,6 +291,13 @@ mod tests {
         Box::leak(out.into_boxed_slice())
     }
 
+    fn stored_blob(method: u8, files: &[(&str, &[u8])], exe: &str) -> &'static [u8] {
+        let mut out = STORED_HEADER.to_vec();
+        out.push(method);
+        out.extend_from_slice(blob(files, exe));
+        Box::leak(out.into_boxed_slice())
+    }
+
     fn entry<'a>(files: &'a [BinaryData], path: &str) -> Option<&'a BinaryData> {
         files
             .iter()
@@ -289,6 +314,61 @@ mod tests {
         assert_eq!(exe, "./rustdesk.exe");
         assert_eq!(files.len(), 2);
         assert_eq!(entry(&files, "./custom.txt").unwrap().raw, b"cfg");
+    }
+
+    #[test]
+    fn legacy_blobs_are_brotli() {
+        let compressed = {
+            let mut out = Vec::new();
+            let mut writer = brotli::CompressorWriter::new(&mut out, BUF_SIZE, 11, 22);
+            std::io::Write::write_all(&mut writer, b"app").unwrap();
+            drop(writer);
+            Box::leak(out.into_boxed_slice())
+        };
+        let (files, _) = parse(blob(&[("./rustdesk.exe", compressed)], "./rustdesk.exe")).unwrap();
+        assert!(!files[0].stored);
+        assert_eq!(files[0].decompress(), b"app");
+    }
+
+    #[test]
+    fn parses_the_stored_header() {
+        let (files, exe) = parse(stored_blob(
+            METHOD_STORED,
+            &[("./rustdesk.exe", b"app")],
+            "./rustdesk.exe",
+        ))
+        .unwrap();
+        assert_eq!(exe, "./rustdesk.exe");
+        assert!(files[0].stored);
+        assert_eq!(files[0].decompress(), b"app");
+
+        let (files, _) = parse(stored_blob(METHOD_BROTLI, &[("./a", b"x")], "./a")).unwrap();
+        assert!(!files[0].stored);
+    }
+
+    #[test]
+    fn rejects_unknown_methods_and_truncated_headers() {
+        assert!(parse(stored_blob(2, &[("./a", b"x")], "./a")).is_none());
+        assert!(parse(b"rdpack02".as_slice()).is_none());
+        assert!(parse(b"rdpack02\x00".as_slice()).is_none());
+    }
+
+    #[test]
+    fn mixed_payloads_keep_each_entry_method() {
+        let embedded = parse(stored_blob(
+            METHOD_STORED,
+            &[("./rustdesk.exe", b"app"), ("./librustdesk.dll", b"core")],
+            "./rustdesk.exe",
+        ))
+        .unwrap();
+        let package = parse(blob(&[("./custom.txt", b"cfg")], "./acme.exe")).unwrap();
+
+        let (files, exe) = merge(embedded, package);
+
+        assert_eq!(exe, "./acme.exe");
+        assert!(entry(&files, "./acme.exe").unwrap().stored);
+        assert!(entry(&files, "./librustdesk.dll").unwrap().stored);
+        assert!(!entry(&files, "./custom.txt").unwrap().stored);
     }
 
     #[test]
