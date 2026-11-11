@@ -2102,6 +2102,11 @@ pub fn prepare_custom_client_update() -> ResultType<bool> {
 }
 
 pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
+    // Gesoft, 2026-11-11: the support build takes its server and key only from
+    // its compiled profile (`gesoft_support.rs`), never from a file name.
+    if cfg!(feature = "gesoft-support") {
+        hbb_common::bail!("server settings in the file name are not used by this build");
+    }
     let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     // if defined portable appname entry, replace original executable name with it.
     if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {

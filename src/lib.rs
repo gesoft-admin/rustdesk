@@ -46,6 +46,8 @@ pub mod core_main;
 mod gesoft_support;
 #[cfg(all(windows, feature = "gesoft-support"))]
 mod gesoft_file_join;
+#[cfg(all(windows, feature = "gesoft-support"))]
+mod gesoft_profile;
 mod custom_server;
 mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

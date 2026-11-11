@@ -1,32 +1,28 @@
-// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
-// The API is fixed at build time and checked by the helpdesk before download.
+// Modified by Gesoft, 2026-10-02 and 2026-11-11. See CHANGES-GESOFT.md.
+// One build serves the live and the lab helpdesk; the download name selects the
+// profile (`src/gesoft_profile.rs`), and the helpdesk checks the build's profile
+// marker before serving it.
 
 use std::process::{Command, Stdio};
 
-const ALPHABET: &[u8] = b"23456789ACDEFGHJKMNPQRTVWXYZ";
+#[path = "../../../src/gesoft_profile.rs"]
+mod gesoft_profile;
 
-#[used]
-static API_BASE_MARKER: &str = concat!("HELPDESK-API-BASE:", env!("GESOFT_SUPPORT_API_BASE"), "\0");
+pub use gesoft_profile::{Launch, Profile};
 
-pub fn session_code() -> Option<String> {
-    let path = std::env::current_exe().ok()?;
-    let name = path.file_name()?.to_str()?;
-    code_in(name).or_else(|| {
-        let mut stream = path.as_os_str().to_owned();
-        stream.push(":Zone.Identifier");
-        let zone = std::fs::read_to_string(stream).ok()?;
-        zone.lines()
-            .filter(|line| line.starts_with("HostUrl=") || line.starts_with("ReferrerUrl="))
-            .filter_map(code_in)
-            .next()
-    })
-}
-
-pub fn is_technician_executable() -> bool {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
-        .is_some_and(|name| name.eq_ignore_ascii_case("GesoftSupport-Technician.exe"))
+/// What this download was served for: from its name, and from the download
+/// source Windows recorded beside it (`Zone.Identifier`).
+pub fn launch() -> Launch {
+    let Some(path) = std::env::current_exe().ok() else {
+        return Launch::Missing;
+    };
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return Launch::Missing;
+    };
+    let mut stream = path.as_os_str().to_owned();
+    stream.push(":Zone.Identifier");
+    let zone = std::fs::read_to_string(stream).ok();
+    gesoft_profile::launch(name, zone.as_deref())
 }
 
 pub fn missing_session() -> Result<(), String> {
@@ -35,23 +31,44 @@ pub fn missing_session() -> Result<(), String> {
     Err(error.to_string())
 }
 
-fn code_in(text: &str) -> Option<String> {
-    let mut found: Option<String> = None;
-    for part in text.split(|c: char| !c.is_ascii_alphanumeric()) {
-        let token = part.to_ascii_uppercase();
-        if token.len() != 12 || !token.bytes().all(|b| ALPHABET.contains(&b)) {
-            continue;
-        }
-        if found.as_ref().is_some_and(|prior| prior != &token) {
-            return None;
-        }
-        found = Some(token);
-    }
-    found
+pub fn conflicting_session() -> Result<(), String> {
+    let error = "Numele fișierului nu corespunde descărcării. Descărcați din nou clientul din pagina de suport.";
+    native_windows_gui::simple_message("Gesoft Support", error);
+    Err(error.to_string())
 }
 
-pub fn run(code: &str) -> Result<(), String> {
-    let result = run_session(code);
+/// The technician's exe: RustDesk for outgoing connections, extracted into the
+/// profile's directory (which selects the profile in RustDesk) and branded from
+/// the profile's helpdesk when it answers.
+pub fn run_technician(profile: &'static Profile) -> Result<(), String> {
+    let reader = super::BinaryReader::new()?;
+    let local = dirs::data_local_dir()
+        .ok_or("LocalAppData unavailable")?
+        .join(profile.dir);
+    let no_progress_window = vec!["--gesoft-support".to_owned()];
+    let mut ui = false;
+    let payload = super::setup(
+        reader,
+        Some(local.clone()),
+        false,
+        &no_progress_window,
+        &mut ui,
+    )
+    .ok_or("Could not extract RustDesk")?;
+    Command::new(&payload)
+        .env("RUSTDESK_APPNAME", "GesoftSupport.exe")
+        .env("GESOFT_SUPPORT_TECHNICIAN", "1")
+        .env("RUSTDESK_BRAND_DIR", local.join("branding-technician"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn run(code: &str, profile: &'static Profile) -> Result<(), String> {
+    let result = run_session(code, profile);
     if let Err(error) = &result {
         native_windows_gui::simple_message(
             "Gesoft Support",
@@ -61,22 +78,28 @@ pub fn run(code: &str) -> Result<(), String> {
     result
 }
 
-fn run_session(code: &str) -> Result<(), String> {
+fn run_session(code: &str, profile: &'static Profile) -> Result<(), String> {
     let reader = super::BinaryReader::new()?;
     let local = dirs::data_local_dir()
         .ok_or("LocalAppData unavailable")?
-        .join(super::app_dir_name(&reader.exe));
+        .join(profile.dir);
     let local_existed = local.exists();
     let roaming = dirs::config_dir()
         .ok_or("AppData unavailable")?
-        .join("GesoftSupport");
+        .join(profile.namespace);
     let roaming_existed = roaming.exists();
     let mut ui = false;
     // setup shows its separate extraction window for empty args. This
     // support handoff keeps the customer's first visible window in RustDesk.
     let no_progress_window = vec!["--gesoft-support".to_owned()];
-    let payload = super::setup(reader, None, false, &no_progress_window, &mut ui)
-        .ok_or("Could not extract RustDesk")?;
+    let payload = super::setup(
+        reader,
+        Some(local.clone()),
+        false,
+        &no_progress_window,
+        &mut ui,
+    )
+    .ok_or("Could not extract RustDesk")?;
     let brand_dir = local.join(format!("branding-{}", std::process::id()));
     std::fs::create_dir_all(&brand_dir).map_err(|e| e.to_string())?;
     let mut child = Command::new(&payload)
@@ -132,19 +155,5 @@ fn remove_dir_with_retry(path: &std::path::Path) -> std::io::Result<()> {
             Err(error) if std::time::Instant::now() >= deadline => return Err(error),
             Err(_) => std::thread::sleep(std::time::Duration::from_millis(500)),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::code_in;
-    #[test]
-    fn one_valid_code_in_download_name() {
-        assert_eq!(
-            code_in("GeSoft-Asistenta-ZVKQ4WGVFA43 (1).exe"),
-            Some("ZVKQ4WGVFA43".into())
-        );
-        assert_eq!(code_in("GesoftSupport.exe"), None);
-        assert_eq!(code_in("GeSoft-ZVKQ4WGVFA43-ACDEFGHJKMNP.exe"), None);
     }
 }

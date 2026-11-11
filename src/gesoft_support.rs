@@ -1,23 +1,108 @@
-// Modified by Gesoft, 2026-10-02. See CHANGES-GESOFT.md.
+// Modified by Gesoft, 2026-10-02 and 2026-11-11. See CHANGES-GESOFT.md.
 
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, sync::OnceLock, time::Duration};
 
-use hbb_common::config::{Config, HARD_SETTINGS, OVERWRITE_SETTINGS};
+use hbb_common::config::{
+    Config, APP_NAME, BUILTIN_SETTINGS, EXE_RENDEZVOUS_SERVER, HARD_SETTINGS, OVERWRITE_SETTINGS,
+};
 
-const API_BASE: &str = env!("GESOFT_SUPPORT_API_BASE");
-const CODE_ALPHABET: &[u8] = b"23456789ACDEFGHJKMNPQRTVWXYZ";
+use crate::gesoft_profile::{self, Profile};
+
 const CODE_ENV: &str = "GESOFT_SUPPORT_CODE";
+/// Set by the packer for the technician's exe: outgoing connections, no
+/// customer restrictions. The technician never elevates, so its helpers all
+/// inherit it; a process without it is treated as a customer's.
+const TECHNICIAN_ENV: &str = "GESOFT_SUPPORT_TECHNICIAN";
 /// Passed by the portable packer once RustDesk has exited: report the
 /// customer's close to the helpdesk and exit, without starting anything.
 pub const CLOSED_ARG: &str = "--gesoft-support-closed";
 
-pub fn prepare() -> Result<Option<String>, String> {
+static PROFILE: OnceLock<&'static Profile> = OnceLock::new();
+
+fn profile() -> &'static Profile {
+    // `prepare()` sets it before anything else runs, or the process exits.
+    PROFILE.get().copied().unwrap_or(&gesoft_profile::LIVE)
+}
+
+/// The profile follows the directory the packer extracted RustDesk into. Every
+/// process of the session runs that same executable, including an elevated
+/// helper, which does not inherit the environment.
+fn select_profile() -> Result<&'static Profile, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe
+        .parent()
+        .and_then(|d| d.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    gesoft_profile::from_dir(dir).ok_or_else(|| {
+        "Gesoft Support pornește numai din descărcarea de suport. Descărcați din nou clientul din pagina de suport."
+            .to_owned()
+    })
+}
+
+/// Runs first in every process, with or without arguments, before any read of
+/// the configuration: the compiled profile is the only source of the helpdesk,
+/// the rendezvous server and its key, whatever a toml on this PC says.
+fn apply_profile(profile: &'static Profile) -> Result<(), String> {
+    let _ = PROFILE.set(profile);
+    *APP_NAME.write().map_err(|e| e.to_string())? = profile.namespace.to_owned();
+    *EXE_RENDEZVOUS_SERVER.write().map_err(|e| e.to_string())? = profile.rendezvous.to_owned();
+    let mut overwrite = OVERWRITE_SETTINGS.write().map_err(|e| e.to_string())?;
+    for (k, v) in [
+        ("custom-rendezvous-server", profile.rendezvous),
+        ("key", profile.key),
+        // Empty: the relay is the one the rendezvous server names.
+        ("relay-server", ""),
+        ("api-server", ""),
+    ] {
+        overwrite.insert(k.into(), v.into());
+    }
+    drop(overwrite);
+    // No device registration, so no heartbeat to an API server derived from
+    // the rendezvous host (`hbbs_http/sync.rs`).
+    BUILTIN_SETTINGS
+        .write()
+        .map_err(|e| e.to_string())?
+        .insert("register-device".into(), "N".into());
     // This build is attended-only. Keep RustDesk's installer code available for
     // a later installer release, but never offer it in this session build.
     HARD_SETTINGS
         .write()
         .map_err(|e| e.to_string())?
         .insert("disable-installation".into(), "Y".into());
+    Ok(())
+}
+
+/// A customer's support session, in every one of its processes (the main
+/// window, the connection manager, the server, an elevated helper):
+/// incoming-only, no sound, and the customer's click to accept, whatever an
+/// existing toml says.
+fn apply_customer_restrictions() -> Result<(), String> {
+    // RustDesk's incoming-only mode hides the outgoing connect panel and
+    // recent sessions, and refuses outgoing calls.
+    HARD_SETTINGS
+        .write()
+        .map_err(|e| e.to_string())?
+        .insert("conn-type".into(), "incoming".into());
+    let mut overwrite = OVERWRITE_SETTINGS.write().map_err(|e| e.to_string())?;
+    // The operator neither needs nor gets the customer's audio, in the desktop
+    // or the browser viewer.
+    overwrite.insert("enable-audio".into(), "N".into());
+    overwrite.insert("approve-mode".into(), "click".into());
+    Ok(())
+}
+
+fn is_technician() -> bool {
+    std::env::var(TECHNICIAN_ENV).is_ok_and(|v| v == "1")
+}
+
+pub fn prepare() -> Result<Option<String>, String> {
+    let profile = select_profile()?;
+    apply_profile(profile)?;
+    let technician = is_technician();
+    if !technician {
+        apply_customer_restrictions()?;
+    }
 
     if let Some(first) = std::env::args_os().nth(1) {
         if first == CLOSED_ARG {
@@ -26,37 +111,38 @@ pub fn prepare() -> Result<Option<String>, String> {
         }
         return Ok(None);
     }
-    let Ok(code) = std::env::var(CODE_ENV) else {
-        return Ok(None);
-    };
-    if code.len() != 12 || !code.bytes().all(|b| CODE_ALPHABET.contains(&b)) {
-        return Err("Codul sesiunii de suport este invalid.".into());
-    }
-
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
+    if technician {
+        // Cosmetic for the technician: never stop it from starting.
+        if let Err(error) = load_brand(
+            &client,
+            &format!("{}/api/brand", profile.api_base),
+            " — Tehnician",
+        ) {
+            hbb_common::log::warn!("technician branding unavailable: {error}");
+        }
+        return Ok(None);
+    }
+    let Ok(code) = std::env::var(CODE_ENV) else {
+        return Ok(None);
+    };
+    if !gesoft_profile::valid_code(&code) {
+        return Err("Codul sesiunii de suport este invalid.".into());
+    }
+
     client
-        .post(format!("{API_BASE}/api/support/{code}/claim"))
+        .post(format!("{}/api/support/{code}/claim", profile.api_base))
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
         .map_err(|e| format!("Sesiunea de suport nu a fost aprobată: {e}"))?;
-
-    // A support session only receives: RustDesk's incoming-only mode hides the
-    // outgoing connect panel and recent sessions, and refuses outgoing calls.
-    HARD_SETTINGS
-        .write()
-        .map_err(|e| e.to_string())?
-        .insert("conn-type".into(), "incoming".into());
-    // Support sessions carry no sound: the operator neither needs nor gets the
-    // customer's audio, in the desktop or the browser viewer.
-    OVERWRITE_SETTINGS
-        .write()
-        .map_err(|e| e.to_string())?
-        .insert("enable-audio".into(), "N".into());
-    load_brand(&client, &code)?;
-    prepare_click_approval()?;
+    load_brand(
+        &client,
+        &format!("{}/api/support/{code}/brand", profile.api_base),
+        "",
+    )?;
     Ok(Some(code))
 }
 
@@ -66,7 +152,7 @@ fn notify_closed() {
     let Ok(code) = std::env::var(CODE_ENV) else {
         return;
     };
-    if code.len() != 12 || !code.bytes().all(|b| CODE_ALPHABET.contains(&b)) {
+    if !gesoft_profile::valid_code(&code) {
         return;
     }
     if let Ok(client) = reqwest::blocking::Client::builder()
@@ -74,14 +160,19 @@ fn notify_closed() {
         .build()
     {
         let _ = client
-            .post(format!("{API_BASE}/api/support/{code}/close"))
+            .post(format!("{}/api/support/{code}/close", profile().api_base))
             .send();
     }
 }
 
-fn load_brand(client: &reqwest::blocking::Client, code: &str) -> Result<(), String> {
-    let url = format!("{API_BASE}/api/support/{code}/brand");
-    let response = client.get(&url).send().map_err(|e| e.to_string())?;
+/// `url` serves the brand manifest, and each image under it. 404: no
+/// branding, RustDesk keeps its own look.
+fn load_brand(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    name_suffix: &str,
+) -> Result<(), String> {
+    let response = client.get(url).send().map_err(|e| e.to_string())?;
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Ok(());
     }
@@ -117,26 +208,9 @@ fn load_brand(client: &reqwest::blocking::Client, code: &str) -> Result<(), Stri
         }
         std::fs::write(dir.join(format!("{asset}.png")), bytes).map_err(|e| e.to_string())?;
     }
-    std::env::set_var("RUSTDESK_BRAND_NAME", name);
+    std::env::set_var("RUSTDESK_BRAND_NAME", format!("{name}{name_suffix}"));
     std::env::set_var("RUSTDESK_BRAND_ACCENT", accent);
     Ok(())
-}
-
-fn prepare_click_approval() -> Result<(), String> {
-    let roaming = std::env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .ok_or("Profilul Windows nu este disponibil")?;
-    let dir = roaming.join("GesoftSupport").join("config");
-    let file = dir.join("GesoftSupport2.toml");
-    if file.exists() {
-        return Ok(());
-    }
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(
-        file,
-        "rendezvous_server = ''\nnat_type = 0\nserial = 0\n\n[options]\napprove-mode = 'click'\n",
-    )
-    .map_err(|e| e.to_string())
 }
 
 pub fn start(code: String) {
@@ -153,14 +227,14 @@ pub fn start(code: String) {
             }
         };
         if let Err(error) = client
-            .post(format!("{API_BASE}/api/ready"))
+            .post(format!("{}/api/ready", profile().api_base))
             .json(&serde_json::json!({"code": code, "rustdesk_id": id}))
             .send()
             .and_then(reqwest::blocking::Response::error_for_status)
         {
             hbb_common::log::error!("support ID report failed: {error}");
         }
-        let status_url = format!("{API_BASE}/api/status/{code}");
+        let status_url = format!("{}/api/status/{code}", profile().api_base);
         loop {
             std::thread::sleep(Duration::from_secs(2));
             let status = client

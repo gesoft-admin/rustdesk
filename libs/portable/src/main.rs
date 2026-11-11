@@ -275,12 +275,12 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
 fn main() -> Result<(), String> {
     #[cfg(all(windows, feature = "gesoft-support"))]
     {
-        if let Some(code) = gesoft_support::session_code() {
-            return gesoft_support::run(&code);
-        }
-        if !gesoft_support::is_technician_executable() {
-            return gesoft_support::missing_session();
-        }
+        return match gesoft_support::launch() {
+            gesoft_support::Launch::Session { code, profile } => gesoft_support::run(&code, profile),
+            gesoft_support::Launch::Technician(profile) => gesoft_support::run_technician(profile),
+            gesoft_support::Launch::Missing => gesoft_support::missing_session(),
+            gesoft_support::Launch::Conflict => gesoft_support::conflicting_session(),
+        };
     }
     let mut args = Vec::new();
     let mut arg_exe = Default::default();

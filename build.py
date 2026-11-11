@@ -315,7 +315,7 @@ def linux_packaging_branch():
 
 def get_features(args):
     features = ['inline'] if not args.flutter else []
-    if args.flutter and os.environ.get('GESOFT_SUPPORT_API_BASE'):
+    if args.flutter and os.environ.get('GESOFT_SUPPORT_BUILD') == '1':
         features.append('gesoft-support')
     if args.hwcodec:
         features.append('hwcodec')

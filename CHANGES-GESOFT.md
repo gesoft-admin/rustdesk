@@ -30,6 +30,26 @@ Modified 2026-11-09: when RustDesk exits, the packer runs it once more with
 `--gesoft-support-closed` so the Helpdesk learns at once that the customer
 closed the session, before cleanup starts.
 
+Modified 2026-11-11: one build serves the live and the lab Helpdesk. The packer
+reads the profile from the download name (a `Lab` word selects the lab; live
+names carry none) and from the download source Windows records beside the file
+(`Zone.Identifier`), as two separate candidates that must agree, and extracts
+RustDesk into the profile's own directory (`%LOCALAPPDATA%\gesoftsupport` or
+`gesoftsupportlab`), which is how RustDesk learns its profile. The technician's
+exe (`GesoftSupport-Technician.exe`, `…-Technician-Lab.exe`) is extracted the
+same way and started with `GESOFT_SUPPORT_TECHNICIAN=1` and a branding
+directory. The address marker compiled into the packer is gone; CI appends a
+profile marker instead (below).
+
+### `src/gesoft_profile.rs` — added 2026-11-11
+
+The two profiles one build serves, `live` and `lab`: Helpdesk API base,
+rendezvous host, its public key, the configuration namespace (`APP_NAME`) and
+the extraction directory, plus the pure decision of which profile a download
+name and its `Zone.Identifier` select. Compiled into RustDesk and, through
+`#[path]`, into the portable packer; read by the CI marker step. Its tests run
+on any host.
+
 ### `src/gesoft_support.rs` — added 2026-10-02
 
 The Windows RustDesk application claims the session before startup, sets
@@ -52,6 +72,21 @@ operator (desktop or browser viewer). Without a support code it is unchanged.
 Modified 2026-11-09: with `--gesoft-support-closed` and a support code in the
 environment, it reports the close to the Helpdesk (best effort, 5 s) and exits
 before starting anything else.
+
+Modified 2026-11-11: the Helpdesk API base, the rendezvous server and its key
+come from the compiled profile, no longer from a build-time address. Every
+process of the build (with or without arguments, including an elevated helper,
+which does not inherit the environment) first selects the profile from the
+directory it runs in and refuses to start outside the two known ones; then sets
+`APP_NAME` to the profile's namespace, `EXE_RENDEZVOUS_SERVER`, and overrides
+`custom-rendezvous-server`, `key`, `relay-server` and `api-server` so that a
+toml on the PC cannot steer the server, the key or the relay, and turns device
+registration off (no heartbeat). Unless started as the technician, every process
+also applies the customer restrictions (incoming-only, no audio, and
+`approve-mode = click` as an override, where before it was written to a new toml
+only), not only the main window. The technician's RustDesk fetches the
+Helpdesk's public branding and shows it with „— Tehnician”; if it cannot, it
+starts with the stock look.
 
 Modified 2026-11-10: `file_transfer_joins_control` lets a file-transfer login in
 without a second Accept when the customer has already accepted a remote control
@@ -87,15 +122,26 @@ readers are new `flutter/lib/native/brand.dart` and `flutter/lib/web/brand.dart`
 ### `Cargo.toml`, `build.py`, `src/lib.rs`, `src/core_main.rs` — modified 2026-10-02
 
 These opt the RustDesk application into the support feature only when the
-Helpdesk API base is set at build time. The shared startup path has a thin
+Helpdesk API base is set at build time (since 2026-11-11: when
+`GESOFT_SUPPORT_BUILD=1`; `src/lib.rs` also declares `gesoft_profile`). The shared startup path has a thin
 feature-gated hook; builds without the feature follow the previous path.
 `src/lib.rs` also declares `gesoft_file_join` under the same feature (2026-11-10).
 
 ### `libs/portable/Cargo.toml`, `generate.py`, `src/main.rs`, build workflow — modified 2026-10-02
 
 These opt the portable packer into the support handoff when a Helpdesk API base
-is provided at build time. Builds without the feature continue through the
+is provided at build time (since 2026-11-11: when `GESOFT_SUPPORT_BUILD=1`; the
+workflow builds once for both profiles and appends
+`HELPDESK-PROFILES:v1;live=<api>|<host>|<key>;lab=…` to the portable exe after
+checking that the DLL carries every profile value). Builds without the feature continue through the
 upstream portable entry point.
+
+### `src/platform/windows.rs` — modified 2026-11-11
+
+`get_license_from_exe_name` returns an error in builds with `gesoft-support`, so
+a file name such as `rustdesk-host=…,key=….exe` cannot replace the compiled
+profile's server, key or API server (it is read by `bootstrap()`, `get_key()`
+and `get_api_server()`). Builds without the feature are unchanged.
 
 ### `src/common.rs` — modified 2026-09-06
 

@@ -14,12 +14,6 @@ name: Support Windows x64 Build
 
 on:
   workflow_dispatch:
-    inputs:
-      support_api_base:
-        description: Helpdesk API base embedded in the test build
-        required: false
-        default: https://helpdesk.gesoft.ro
-        type: string
   push:
     branches:
       - support
@@ -34,7 +28,9 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VERSION: "1.5.0"
-  GESOFT_SUPPORT_API_BASE: ${{ inputs.support_api_base || 'https://helpdesk.gesoft.ro' }}
+  # One build for the live and the lab helpdesk: the profiles are compiled
+  # from src/gesoft_profile.rs, and the download name selects one.
+  GESOFT_SUPPORT_BUILD: "1"
 
 jobs:
   generate-bridge:
@@ -224,24 +220,36 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import os
+          import re
           from pathlib import Path
 
-          base = os.environ['GESOFT_SUPPORT_API_BASE'].encode('ascii')
+          # The profiles, from the one source the client and the packer compile.
+          source = Path('src/gesoft_profile.rs').read_text(encoding='utf-8')
+          profiles = []
+          for name, body in re.findall(r'pub const (LIVE|LAB): Profile = Profile \{(.*?)\};', source, re.S):
+              fields = dict(re.findall(r'(\w+): "([^"]*)"', body))
+              profiles.append(fields)
+          if [p['name'] for p in profiles] != ['live', 'lab']:
+              raise SystemExit('Could not read the live and lab profiles from src/gesoft_profile.rs')
           dll = Path('rustdesk/librustdesk.dll').read_bytes()
-          if base not in dll:
-              raise SystemExit('RustDesk DLL lacks the selected support API address')
+          for p in profiles:
+              for field in ('api_base', 'rendezvous', 'key'):
+                  if p[field].encode('ascii') not in dll:
+                      raise SystemExit(f"RustDesk DLL lacks the {p['name']} {field}")
           exe = Path('dist/rustdesk-${{ env.VERSION }}-x86_64-portable.exe')
           data = exe.read_bytes()
-          marker = b'HELPDESK-API-BASE:' + base + b'\0'
-          if b'HELPDESK-API-BASE:' in data:
-              raise SystemExit('Portable executable already contains an API marker')
+          if b'HELPDESK-API-BASE:' in data or b'HELPDESK-PROFILES:' in data:
+              raise SystemExit('Portable executable already contains a helpdesk marker')
+          marker = ('HELPDESK-PROFILES:v1;' + ';'.join(
+              f"{p['name']}={p['api_base']}|{p['rendezvous']}|{p['key']}" for p in profiles
+          ) + '\0').encode('ascii')
           # The PE packer stores its compressed payload in a linked section.
-          # This constant trailer lets Helpdesk validate the portable file it
+          # This constant trailer lets Helpdesk check the profiles of the file it
           # serves without changing the payload or introducing a per-session hash.
+          # It is appended before any signing, so a signature covers it.
           exe.write_bytes(data + marker)
-          if not exe.read_bytes().endswith(marker):
-              raise SystemExit('Portable API marker verification failed')
+          if exe.read_bytes().count(b'HELPDESK-PROFILES:') != 1:
+              raise SystemExit('Portable profile marker verification failed')
           PY
 
       - name: Upload unsigned artifact

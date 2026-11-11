@@ -90,7 +90,7 @@ def build_portable(output_folder: str, target: str):
     try:
         os.chdir(output_folder)
         cmd = ["cargo", "build", "--locked", "--release"]
-        if os.environ.get("GESOFT_SUPPORT_API_BASE"):
+        if os.environ.get("GESOFT_SUPPORT_BUILD") == "1":
             cmd.extend(["--features", "gesoft-support"])
         if target:
             cmd.extend(["--target", target])
