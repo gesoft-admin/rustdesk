@@ -80,6 +80,8 @@ pub fn lab_config_path() -> PathBuf {
 /// live profile is refused.
 pub fn parse_lab_config(text: &str) -> Result<Endpoints, String> {
     let (mut api_base, mut rendezvous, mut key) = (None, None, None);
+    // Notepad may save a UTF-8 byte order mark.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -326,6 +328,11 @@ mod tests {
                 key: "Ok9SZ5+ExasFXnNNw0lW5gg3gAsEr2xpEFenO5gHm2s=".into(),
             })
         );
+    }
+
+    #[test]
+    fn a_lab_config_saved_with_a_byte_order_mark_reads() {
+        assert!(parse_lab_config(&format!("\u{feff}{LAB_CONF}")).is_ok());
     }
 
     #[test]
