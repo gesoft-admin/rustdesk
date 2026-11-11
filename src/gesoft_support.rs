@@ -103,7 +103,18 @@ fn is_technician() -> bool {
 
 pub fn prepare() -> Result<Option<String>, String> {
     let profile = select_profile()?;
-    apply_profile(profile, gesoft_profile::endpoints(profile)?)?;
+    let endpoints = match gesoft_profile::endpoints(profile) {
+        Ok(endpoints) => endpoints,
+        // Only the first, argument-less process tells the user; a helper,
+        // the connection manager or the close run would show a duplicate (or,
+        // as SYSTEM, invisible) dialog, and the packer waits on the close run.
+        Err(error) if std::env::args_os().nth(1).is_some() => {
+            hbb_common::log::error!("{error}");
+            std::process::exit(2);
+        }
+        Err(error) => return Err(error),
+    };
+    apply_profile(profile, endpoints)?;
     let api_base = api_base();
     let technician = is_technician();
     if !technician {

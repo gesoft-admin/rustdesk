@@ -104,25 +104,14 @@ pub fn parse_lab_config(text: &str) -> Result<Endpoints, String> {
     let api_base = api_base.ok_or("api_base missing")?;
     let rendezvous = rendezvous.ok_or("rendezvous missing")?;
     let key = key.ok_or("key missing")?;
-    let api_ok = (api_base.starts_with("http://") || api_base.starts_with("https://"))
-        && api_base.len() > "https://".len()
-        && !api_base.chars().any(char::is_whitespace);
-    if !api_ok {
-        return Err("api_base must be an http(s) address".into());
+    if !valid_api_base(&api_base) {
+        return Err("api_base must be an http(s) address with a host".into());
     }
-    if rendezvous.is_empty()
-        || rendezvous.contains("://")
-        || rendezvous.chars().any(char::is_whitespace)
-    {
-        return Err("rendezvous must be a host".into());
+    if !valid_host_port(&rendezvous) {
+        return Err("rendezvous must be a host, with an optional port".into());
     }
-    let key_ok = key.len() == 44
-        && key.ends_with('=')
-        && key[..43]
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/');
-    if !key_ok {
-        return Err("key must be a base64 public key".into());
+    if !valid_public_key(&key) {
+        return Err("key must be a base64 32-byte public key".into());
     }
     if api_base.trim_end_matches('/') == LIVE_API_BASE
         || rendezvous.eq_ignore_ascii_case(LIVE_RENDEZVOUS)
@@ -135,6 +124,58 @@ pub fn parse_lab_config(text: &str) -> Result<Endpoints, String> {
         rendezvous,
         key,
     })
+}
+
+/// `host` or `host:port`: letters, digits, dots and dashes, a port of 1-65535.
+fn valid_host_port(text: &str) -> bool {
+    let (host, port) = match text.rsplit_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (text, None),
+    };
+    let host_ok = !host.is_empty()
+        && host.len() <= 253
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+        && !host.starts_with(['.', '-'])
+        && !host.ends_with(['.', '-']);
+    let port_ok = port.map_or(true, |p| {
+        !p.is_empty() && p.len() <= 5 && p.bytes().all(|b| b.is_ascii_digit())
+            && p.parse::<u32>().is_ok_and(|n| (1..=65535).contains(&n))
+    });
+    host_ok && port_ok
+}
+
+/// `http(s)://host[:port]` with an optional path; nothing else.
+fn valid_api_base(text: &str) -> bool {
+    let Some(rest) = text
+        .strip_prefix("http://")
+        .or_else(|| text.strip_prefix("https://"))
+    else {
+        return false;
+    };
+    let (authority, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, ""),
+    };
+    valid_host_port(authority)
+        && path
+            .bytes()
+            .all(|b| b.is_ascii_graphic() && !matches!(b, b'?' | b'#' | b'@'))
+}
+
+/// 44 characters of standard base64 that decode to 32 bytes: 43 symbols and
+/// one `=`, the last symbol carrying no stray bits.
+fn valid_public_key(key: &str) -> bool {
+    const B64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes = key.as_bytes();
+    bytes.len() == 44
+        && bytes[43] == b'='
+        && bytes[..43].iter().all(|b| B64.contains(b))
+        && B64
+            .iter()
+            .position(|b| *b == bytes[42])
+            .is_some_and(|v| v & 0b11 == 0)
 }
 
 /// The addresses of `profile`: live's compiled ones, never a file; lab's from
@@ -331,6 +372,15 @@ mod tests {
     }
 
     #[test]
+    fn hosts_ports_and_paths_that_read() {
+        assert!(valid_host_port("192.168.99.110"));
+        assert!(valid_host_port("lab.gesoft.lan:21116"));
+        assert!(valid_api_base("http://192.168.99.110:8080"));
+        assert!(valid_api_base("https://lab.example/helpdesk"));
+        assert!(valid_public_key(LIVE_KEY));
+    }
+
+    #[test]
     fn a_lab_config_saved_with_a_byte_order_mark_reads() {
         assert!(parse_lab_config(&format!("\u{feff}{LAB_CONF}")).is_ok());
     }
@@ -349,6 +399,17 @@ mod tests {
             &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\n{key}\n{key}\n"),
             &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\n{key}\nrelay=x\n"),
             &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\n{key}\njunk\n"),
+            &format!("api_base=https:///bad\nrendezvous=10.0.0.5\n{key}\n"),
+            &format!("api_base=http://user@10.0.0.5\nrendezvous=10.0.0.5\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:99999\nrendezvous=10.0.0.5\n{key}\n"),
+            &format!("api_base=http://10.0.0.5/x?y=1\nrendezvous=10.0.0.5\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:8080\nrendezvous=/\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5:\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:8080\nrendezvous=-x.lan\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0\u{7}.5\n{key}\n"),
+            "api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\nkey=Ok9SZ5+ExasFXnNNw0lW5gg3gAsEr2xpEFenO5gHm2t=\n",
+            "api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\nkey=Ok9SZ5+ExasFXnNNw0lW5gg3gAsEr2xpEFenO5gHm2==\n",
+            "api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\nkey=Ok9SZ5-ExasFXnNNw0lW5gg3gAsEr2xpEFenO5gHm2s=\n",
         ] {
             assert!(parse_lab_config(text).is_err(), "accepted: {text:?}");
         }
