@@ -31,6 +31,29 @@ Observations that did not explain the detections, kept for the record:
   it. `generate.py --stored` and the reader's support for it stay in the code,
   unused by CI, because the clean binary was compiled with them.
 
+## The clean verdict did not last
+
+The clean build `07ea4b6e` was flagged too, at 19:50 the same day
+(`Wacatac.B!ml`), with the same local signatures (1.463.236.0) that had passed
+it at 16:55, and under any name: a copy saved as `GesoftSupport.exe`, without a
+mark of the web and not through Chrome, was flagged at once. The verdict moved
+in Defender's cloud, not on the VM. In the hours before, the lab VM (cloud
+protection on, automatic sample submission on) had downloaded the same exe
+dozens of times under different names, by Chrome, `Invoke-WebRequest` and a
+local HTTP server, and started, killed, elevated and run it as SYSTEM through
+scheduled tasks. That is the pattern most likely to have sent it for cloud
+analysis; it is not proven to be the trigger.
+
+So for the lab VM:
+
+- Cloud-delivered protection and automatic sample submission stay off, set by
+  hand in Windows Security: tests must not submit our builds.
+- Real-time protection is off while functional tests run, switched by hand,
+  never by a script, and back on afterwards.
+- The Defender check is a separate, single scan of the candidate build at the
+  end. It shows what the local engine says, not what the cloud will decide
+  later: only code signing builds reputation that carries across builds.
+
 Before shipping a new support build:
 
 1. Let CI's safeguard checks pass; do not weaken them to get a build through.
