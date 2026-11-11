@@ -41,12 +41,22 @@ same way and started with `GESOFT_SUPPORT_TECHNICIAN=1` and a branding
 directory. The address marker compiled into the packer is gone; CI appends a
 profile marker instead (below).
 
+Modified 2026-11-11 (later): the packer reads only the download name; the
+`Zone.Identifier` fallback and the name/source conflict check are gone, so a
+file renamed without its code asks for a new download. Before extracting a
+lab session or the lab technician, it checks that the test machine's
+`%ProgramData%\GesoftSupportLab\lab.conf` is in place and valid, and stops
+with a message otherwise.
+
 ### `src/gesoft_profile.rs` — added 2026-11-11
 
-The two profiles one build serves, `live` and `lab`: Helpdesk API base,
-rendezvous host, its public key, the configuration namespace (`APP_NAME`) and
-the extraction directory, plus the pure decision of which profile a download
-name and its `Zone.Identifier` select. Compiled into RustDesk and, through
+The two profiles one build serves, `live` and `lab`: the configuration
+namespace (`APP_NAME`), the extraction directory and the technician's name,
+plus the pure decision of which profile a download name selects. Live's
+Helpdesk API base, rendezvous host and public key are compiled; lab's are read
+from `%ProgramData%\GesoftSupportLab\lab.conf` on the test machine (modified
+later on 2026-11-11: no lab address is compiled any more, and the name alone
+selects the profile). Compiled into RustDesk and, through
 `#[path]`, into the portable packer; read by the CI marker step. Its tests run
 on any host.
 
@@ -132,7 +142,7 @@ feature-gated hook; builds without the feature follow the previous path.
 These opt the portable packer into the support handoff when a Helpdesk API base
 is provided at build time (since 2026-11-11: when `GESOFT_SUPPORT_BUILD=1`; the
 workflow builds once for both profiles and appends
-`HELPDESK-PROFILES:v1;live=<api>|<host>|<key>;lab=…` to the portable exe after
+`HELPDESK-PROFILES:v2;live=<api>|<host>|<key>;lab=local` (v1 with the lab values until later on 2026-11-11) to the portable exe after
 checking that the DLL carries every profile value). Builds without the feature continue through the
 upstream portable entry point.
 

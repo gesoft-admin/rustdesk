@@ -279,7 +279,6 @@ fn main() -> Result<(), String> {
             gesoft_support::Launch::Session { code, profile } => gesoft_support::run(&code, profile),
             gesoft_support::Launch::Technician(profile) => gesoft_support::run_technician(profile),
             gesoft_support::Launch::Missing => gesoft_support::missing_session(),
-            gesoft_support::Launch::Conflict => gesoft_support::conflicting_session(),
         };
     }
     let mut args = Vec::new();

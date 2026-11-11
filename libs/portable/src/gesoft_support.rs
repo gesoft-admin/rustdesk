@@ -10,8 +10,7 @@ mod gesoft_profile;
 
 pub use gesoft_profile::{Launch, Profile};
 
-/// What this download was served for: from its name, and from the download
-/// source Windows recorded beside it (`Zone.Identifier`).
+/// What this download was served for, from its name alone.
 pub fn launch() -> Launch {
     let Some(path) = std::env::current_exe().ok() else {
         return Launch::Missing;
@@ -19,10 +18,17 @@ pub fn launch() -> Launch {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return Launch::Missing;
     };
-    let mut stream = path.as_os_str().to_owned();
-    stream.push(":Zone.Identifier");
-    let zone = std::fs::read_to_string(stream).ok();
-    gesoft_profile::launch(name, zone.as_deref())
+    gesoft_profile::launch(name)
+}
+
+/// The lab profile runs only where `lab.conf` is in place; checked before
+/// anything is extracted, so the customer sees one message, not RustDesk's
+/// and the close run's.
+fn check_endpoints(profile: &'static Profile) -> Result<(), String> {
+    gesoft_profile::endpoints(profile).map(|_| ()).map_err(|error| {
+        native_windows_gui::simple_message("Gesoft Support", &error);
+        error
+    })
 }
 
 pub fn missing_session() -> Result<(), String> {
@@ -31,16 +37,11 @@ pub fn missing_session() -> Result<(), String> {
     Err(error.to_string())
 }
 
-pub fn conflicting_session() -> Result<(), String> {
-    let error = "Numele fișierului nu corespunde descărcării. Descărcați din nou clientul din pagina de suport.";
-    native_windows_gui::simple_message("Gesoft Support", error);
-    Err(error.to_string())
-}
-
 /// The technician's exe: RustDesk for outgoing connections, extracted into the
 /// profile's directory (which selects the profile in RustDesk) and branded from
 /// the profile's helpdesk when it answers.
 pub fn run_technician(profile: &'static Profile) -> Result<(), String> {
+    check_endpoints(profile)?;
     let reader = super::BinaryReader::new()?;
     let local = dirs::data_local_dir()
         .ok_or("LocalAppData unavailable")?
@@ -69,6 +70,7 @@ pub fn run_technician(profile: &'static Profile) -> Result<(), String> {
 }
 
 pub fn run(code: &str, profile: &'static Profile) -> Result<(), String> {
+    check_endpoints(profile)?;
     let result = run_session(code, profile);
     if let Err(error) = &result {
         native_windows_gui::simple_message(

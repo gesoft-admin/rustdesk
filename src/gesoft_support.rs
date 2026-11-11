@@ -6,7 +6,7 @@ use hbb_common::config::{
     Config, APP_NAME, BUILTIN_SETTINGS, EXE_RENDEZVOUS_SERVER, HARD_SETTINGS, OVERWRITE_SETTINGS,
 };
 
-use crate::gesoft_profile::{self, Profile};
+use crate::gesoft_profile::{self, Endpoints, Profile};
 
 const CODE_ENV: &str = "GESOFT_SUPPORT_CODE";
 /// Set by the packer for the technician's exe: outgoing connections, no
@@ -17,11 +17,15 @@ const TECHNICIAN_ENV: &str = "GESOFT_SUPPORT_TECHNICIAN";
 /// customer's close to the helpdesk and exit, without starting anything.
 pub const CLOSED_ARG: &str = "--gesoft-support-closed";
 
-static PROFILE: OnceLock<&'static Profile> = OnceLock::new();
+static ENDPOINTS: OnceLock<Endpoints> = OnceLock::new();
 
-fn profile() -> &'static Profile {
-    // `prepare()` sets it before anything else runs, or the process exits.
-    PROFILE.get().copied().unwrap_or(&gesoft_profile::LIVE)
+/// The helpdesk of this process's profile. `prepare()` sets it before anything
+/// else runs, or the process exits; the fallback is never a file's value.
+fn api_base() -> String {
+    ENDPOINTS
+        .get()
+        .map(|e| e.api_base.clone())
+        .unwrap_or_else(|| gesoft_profile::LIVE_API_BASE.to_owned())
 }
 
 /// The profile follows the directory the packer extracted RustDesk into. Every
@@ -41,16 +45,16 @@ fn select_profile() -> Result<&'static Profile, String> {
 }
 
 /// Runs first in every process, with or without arguments, before any read of
-/// the configuration: the compiled profile is the only source of the helpdesk,
-/// the rendezvous server and its key, whatever a toml on this PC says.
-fn apply_profile(profile: &'static Profile) -> Result<(), String> {
-    let _ = PROFILE.set(profile);
+/// the configuration: the profile's endpoints (compiled for live, the test
+/// machine's `lab.conf` for lab) are the only source of the helpdesk, the
+/// rendezvous server and its key, whatever a toml on this PC says.
+fn apply_profile(profile: &'static Profile, endpoints: Endpoints) -> Result<(), String> {
     *APP_NAME.write().map_err(|e| e.to_string())? = profile.namespace.to_owned();
-    *EXE_RENDEZVOUS_SERVER.write().map_err(|e| e.to_string())? = profile.rendezvous.to_owned();
+    *EXE_RENDEZVOUS_SERVER.write().map_err(|e| e.to_string())? = endpoints.rendezvous.clone();
     let mut overwrite = OVERWRITE_SETTINGS.write().map_err(|e| e.to_string())?;
     for (k, v) in [
-        ("custom-rendezvous-server", profile.rendezvous),
-        ("key", profile.key),
+        ("custom-rendezvous-server", endpoints.rendezvous.as_str()),
+        ("key", endpoints.key.as_str()),
         // Empty: the relay is the one the rendezvous server names.
         ("relay-server", ""),
         ("api-server", ""),
@@ -70,6 +74,7 @@ fn apply_profile(profile: &'static Profile) -> Result<(), String> {
         .write()
         .map_err(|e| e.to_string())?
         .insert("disable-installation".into(), "Y".into());
+    let _ = ENDPOINTS.set(endpoints);
     Ok(())
 }
 
@@ -98,7 +103,8 @@ fn is_technician() -> bool {
 
 pub fn prepare() -> Result<Option<String>, String> {
     let profile = select_profile()?;
-    apply_profile(profile)?;
+    apply_profile(profile, gesoft_profile::endpoints(profile)?)?;
+    let api_base = api_base();
     let technician = is_technician();
     if !technician {
         apply_customer_restrictions()?;
@@ -119,7 +125,7 @@ pub fn prepare() -> Result<Option<String>, String> {
         // Cosmetic for the technician: never stop it from starting.
         if let Err(error) = load_brand(
             &client,
-            &format!("{}/api/brand", profile.api_base),
+            &format!("{api_base}/api/brand"),
             " — Tehnician",
         ) {
             hbb_common::log::warn!("technician branding unavailable: {error}");
@@ -134,13 +140,13 @@ pub fn prepare() -> Result<Option<String>, String> {
     }
 
     client
-        .post(format!("{}/api/support/{code}/claim", profile.api_base))
+        .post(format!("{api_base}/api/support/{code}/claim"))
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
         .map_err(|e| format!("Sesiunea de suport nu a fost aprobată: {e}"))?;
     load_brand(
         &client,
-        &format!("{}/api/support/{code}/brand", profile.api_base),
+        &format!("{api_base}/api/support/{code}/brand"),
         "",
     )?;
     Ok(Some(code))
@@ -160,7 +166,7 @@ fn notify_closed() {
         .build()
     {
         let _ = client
-            .post(format!("{}/api/support/{code}/close", profile().api_base))
+            .post(format!("{}/api/support/{code}/close", api_base()))
             .send();
     }
 }
@@ -227,14 +233,14 @@ pub fn start(code: String) {
             }
         };
         if let Err(error) = client
-            .post(format!("{}/api/ready", profile().api_base))
+            .post(format!("{}/api/ready", api_base()))
             .json(&serde_json::json!({"code": code, "rustdesk_id": id}))
             .send()
             .and_then(reqwest::blocking::Response::error_for_status)
         {
             hbb_common::log::error!("support ID report failed: {error}");
         }
-        let status_url = format!("{}/api/status/{code}", profile().api_base);
+        let status_url = format!("{}/api/status/{code}", api_base());
         loop {
             std::thread::sleep(Duration::from_secs(2));
             let status = client

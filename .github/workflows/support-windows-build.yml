@@ -223,26 +223,26 @@ jobs:
           import re
           from pathlib import Path
 
-          # The profiles, from the one source the client and the packer compile.
+          # Live's endpoints, from the one source the client and the packer
+          # compile. Lab has none in the build: they come from lab.conf on the
+          # test machine, so the marker only says that the lab profile exists.
           source = Path('src/gesoft_profile.rs').read_text(encoding='utf-8')
-          profiles = []
-          for name, body in re.findall(r'pub const (LIVE|LAB): Profile = Profile \{(.*?)\};', source, re.S):
-              fields = dict(re.findall(r'(\w+): "([^"]*)"', body))
-              profiles.append(fields)
-          if [p['name'] for p in profiles] != ['live', 'lab']:
-              raise SystemExit('Could not read the live and lab profiles from src/gesoft_profile.rs')
+          live = {}
+          for field in ('API_BASE', 'RENDEZVOUS', 'KEY'):
+              found = re.findall(rf'pub const LIVE_{field}: &str = "([^"]+)";', source)
+              if len(found) != 1:
+                  raise SystemExit(f'Could not read LIVE_{field} from src/gesoft_profile.rs')
+              live[field] = found[0]
           dll = Path('rustdesk/librustdesk.dll').read_bytes()
-          for p in profiles:
-              for field in ('api_base', 'rendezvous', 'key'):
-                  if p[field].encode('ascii') not in dll:
-                      raise SystemExit(f"RustDesk DLL lacks the {p['name']} {field}")
+          for field, value in live.items():
+              if value.encode('ascii') not in dll:
+                  raise SystemExit(f'RustDesk DLL lacks the live {field}')
           exe = Path('dist/rustdesk-${{ env.VERSION }}-x86_64-portable.exe')
           data = exe.read_bytes()
           if b'HELPDESK-API-BASE:' in data or b'HELPDESK-PROFILES:' in data:
               raise SystemExit('Portable executable already contains a helpdesk marker')
-          marker = ('HELPDESK-PROFILES:v1;' + ';'.join(
-              f"{p['name']}={p['api_base']}|{p['rendezvous']}|{p['key']}" for p in profiles
-          ) + '\0').encode('ascii')
+          marker = ('HELPDESK-PROFILES:v2;'
+                    f"live={live['API_BASE']}|{live['RENDEZVOUS']}|{live['KEY']};lab=local\0").encode('ascii')
           # The PE packer stores its compressed payload in a linked section.
           # This constant trailer lets Helpdesk check the profiles of the file it
           # serves without changing the payload or introducing a per-session hash.
