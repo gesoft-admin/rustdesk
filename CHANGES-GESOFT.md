@@ -67,8 +67,9 @@ attended click approval, reports its ID and observes remote close. Its
 `gesoft-support` feature suppresses the installation offer for this temporary
 build. RustDesk's installer code remains available for a future installer
 build. Optional runtime branding is fetched from the Helpdesk session and
-written beside the extracted application; no GeSoft symbol is compiled into
-RustDesk.
+written beside the extracted application; no GeSoft artwork is compiled into
+RustDesk (since 2026-11-11 the support build's version info names Gesoft
+Support; see the build files below).
 
 Modified 2026-11-08: once the session is claimed, it also sets RustDesk's
 existing incoming-only mode (`conn-type = incoming`), which hides the outgoing
@@ -136,6 +137,17 @@ Helpdesk API base is set at build time (since 2026-11-11: when
 `GESOFT_SUPPORT_BUILD=1`; `src/lib.rs` also declares `gesoft_profile`). The shared startup path has a thin
 feature-gated hook; builds without the feature follow the previous path.
 `src/lib.rs` also declares `gesoft_file_join` under the same feature (2026-11-10).
+
+### `libs/portable/build.rs`, `flutter/windows/runner/Runner.rc` (via the support workflow) — modified 2026-11-11
+
+Under `GESOFT_SUPPORT_BUILD=1` the portable executable's version info names
+the product: CompanyName `Gesoft`, ProductName `Gesoft Support`,
+OriginalFilename `GesoftSupport.exe`, and a copyright line that keeps
+upstream's notice and adds Gesoft's for its modifications. The support
+workflow rewrites the same six identity strings of `Runner.rc` before the
+Flutter build, so the extracted `GesoftSupport.exe` says the same; version
+numbers, binary name and icons stay upstream's. Other builds are unchanged.
+`build.rs` also declares its inputs for Cargo's change detection.
 
 ### `libs/portable/Cargo.toml`, `generate.py`, `src/main.rs`, build workflow — modified 2026-10-02
 
@@ -219,10 +231,12 @@ its own. It modifies no upstream code.
 No other runtime code in either repository is changed beyond the files listed
 above. The build's exact dependency versions are recorded in `Cargo.lock`.
 
-Worth being precise about branding, since `APP_NAME` is a product string and
-changing it is a branding change: it is the only one. The icons, the artwork,
-the window chrome, the translation catalogues and every other user-facing
-string are upstream's, unmodified. The `LICENCE` file at the root of this
+Worth being precise about branding. `APP_NAME` is a product string, and since
+2026-11-11 the support build's version info (both executables) names Gesoft
+Support, keeping upstream's copyright notice beside Gesoft's for its
+modifications. Those are the compiled product strings changed. The icons, the
+artwork, the window chrome, the translation catalogues and every other
+user-facing string are upstream's, unmodified. The `LICENCE` file at the root of this
 repository is upstream's AGPL-3.0, unaltered.
 
 Where the upstream name still appears in the interface, that is upstream's

@@ -136,6 +136,37 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-x64-windows-static-rel-out.log" || true
         shell: bash
 
+      - name: Name the support build's runner after Gesoft Support
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Version info of the extracted GesoftSupport.exe. Only the identity
+          # strings change; version numbers, binary name and icon stay upstream's.
+          rc = Path('flutter/windows/runner/Runner.rc')
+          text = rc.read_text(encoding='utf-8')
+          values = {
+              'CompanyName': 'Gesoft',
+              'FileDescription': 'Gesoft Support - asistenta la distanta',
+              'InternalName': 'GesoftSupport',
+              'LegalCopyright': 'Copyright \u00a9 2026 Purslane Tech Pte. Ltd. All rights reserved. Modifications Copyright \u00a9 2026 Gesoft. AGPL-3.0.',
+              'OriginalFilename': 'GesoftSupport.exe',
+              'ProductName': 'Gesoft Support',
+          }
+          lines = text.split('\n')
+          for key, value in values.items():
+              prefix = f'VALUE "{key}", "'
+              hits = [i for i, line in enumerate(lines) if line.strip().startswith(prefix)]
+              if len(hits) != 1:
+                  raise SystemExit(f'Runner.rc: expected one {key}, found {len(hits)}')
+              i = hits[0]
+              indent = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+              eol = '\r' if lines[i].endswith('\r') else ''
+              lines[i] = f'{indent}VALUE "{key}", "{value}" "\\0"{eol}'
+          rc.write_text('\n'.join(lines), encoding='utf-8')
+          PY
+
       - name: Build rustdesk
         run: |
           # Windows: build RustDesk
@@ -250,6 +281,12 @@ jobs:
           exe.write_bytes(data + marker)
           if exe.read_bytes().count(b'HELPDESK-PROFILES:') != 1:
               raise SystemExit('Portable profile marker verification failed')
+          # Both executables carry Gesoft Support's version info.
+          for path in (exe, Path('rustdesk/GesoftSupport.exe')):
+              blob = path.read_bytes()
+              for value in ('Gesoft Support', 'GesoftSupport.exe'):
+                  if value.encode('utf-16-le') not in blob:
+                      raise SystemExit(f'{path} lacks the version string {value}')
           PY
 
       - name: Upload unsigned artifact

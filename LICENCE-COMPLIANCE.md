@@ -26,9 +26,10 @@ a short notice at the top pointing at it. The added `src/gesoft_support.rs`,
 `libs/portable/src/gesoft_support.rs`, `flutter/lib/native/brand.dart` and
 `flutter/lib/web/brand.dart` carry the same notice.
 
-GeSoft symbols are kept in a separately configured Helpdesk asset directory.
-They are fetched at session runtime and are absent from this source tree and
-the portable executable. The source-code offer concerns the RustDesk code;
+GeSoft artwork (logos, icons) is kept in a separately configured Helpdesk asset
+directory. It is fetched at session runtime and is absent from this source tree
+and the portable executable; only the product name appears in the version info
+of the support build (since 2026-11-11). The source-code offer concerns the RustDesk code;
 it does not grant rights to the separately supplied brand artwork.
 
 **§6 — tell the recipient where the source is.** Publishing the fork is not by
