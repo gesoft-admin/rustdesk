@@ -155,9 +155,11 @@ numbers, binary name and icons stay upstream's. Other builds are unchanged.
 header and a method byte; without the flag its output is byte-for-byte the
 previous Brotli blob. The reader recognises the header per blob and keeps the
 method on every entry, so an embedded payload and an `RDPKG` package may differ.
-The support workflow, after uploading the shipped artifact, packs the same
-payload this way into a separate artifact marked experimental, only to compare
-how antivirus heuristics treat the two; it cannot fail the job.
+Run 43027535071 packed the same payload this way once, as a separate
+experimental artifact, to compare how antivirus heuristics treat the two; both
+came out clean, and the workflow no longer builds it (GESOFT-DEFENDER.md).
+The support workflow's verify step now also refuses a packer that embeds a
+private address, reads `Zone.Identifier` or names RustDesk in its version info.
 
 ### `libs/portable/Cargo.toml`, `generate.py`, `src/main.rs`, build workflow — modified 2026-10-02
 
