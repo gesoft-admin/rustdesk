@@ -113,8 +113,10 @@ pub fn parse_lab_config(text: &str) -> Result<Endpoints, String> {
     if !valid_public_key(&key) {
         return Err("key must be a base64 32-byte public key".into());
     }
-    if api_base.trim_end_matches('/') == LIVE_API_BASE
-        || rendezvous.eq_ignore_ascii_case(LIVE_RENDEZVOUS)
+    // By host, whatever the scheme, port or case: any address of live's
+    // helpdesk or rendezvous server is live.
+    if api_host(&api_base) == api_host(LIVE_API_BASE)
+        || host_of(&rendezvous).eq_ignore_ascii_case(LIVE_RENDEZVOUS)
         || key == LIVE_KEY
     {
         return Err("the lab configuration names the live helpdesk".into());
@@ -126,19 +128,47 @@ pub fn parse_lab_config(text: &str) -> Result<Endpoints, String> {
     })
 }
 
-/// `host` or `host:port`: letters, digits, dots and dashes, a port of 1-65535.
+/// The host of `host` or `host:port`.
+fn host_of(text: &str) -> &str {
+    text.rsplit_once(':').map_or(text, |(host, _)| host)
+}
+
+/// The lower-case host of an `http(s)://` address.
+fn api_host(base: &str) -> String {
+    let rest = base
+        .strip_prefix("http://")
+        .or_else(|| base.strip_prefix("https://"))
+        .unwrap_or(base);
+    host_of(rest.split('/').next().unwrap_or_default()).to_ascii_lowercase()
+}
+
+/// A DNS name of letters, digits and inner dashes, or a dotted IPv4 address.
+fn valid_host(host: &str) -> bool {
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels
+        .iter()
+        .all(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return labels.len() == 4
+            && labels.iter().all(|l| l.len() <= 3 && l.parse::<u8>().is_ok());
+    }
+    host.len() <= 253
+        && labels.iter().all(|l| {
+            !l.is_empty()
+                && l.len() <= 63
+                && l.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                && !l.starts_with('-')
+                && !l.ends_with('-')
+        })
+}
+
+/// `host` or `host:port`, with a port of 1-65535.
 fn valid_host_port(text: &str) -> bool {
     let (host, port) = match text.rsplit_once(':') {
         Some((host, port)) => (host, Some(port)),
         None => (text, None),
     };
-    let host_ok = !host.is_empty()
-        && host.len() <= 253
-        && host
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
-        && !host.starts_with(['.', '-'])
-        && !host.ends_with(['.', '-']);
+    let host_ok = valid_host(host);
     let port_ok = port.map_or(true, |p| {
         !p.is_empty() && p.len() <= 5 && p.bytes().all(|b| b.is_ascii_digit())
             && p.parse::<u32>().is_ok_and(|n| (1..=65535).contains(&n))
@@ -407,6 +437,10 @@ mod tests {
             &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5:\n{key}\n"),
             &format!("api_base=http://10.0.0.5:8080\nrendezvous=-x.lan\n{key}\n"),
             &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0\u{7}.5\n{key}\n"),
+            &format!("api_base=http://999.999.999.999\nrendezvous=10.0.0.5\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.5\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:8080\nrendezvous=lab..lan\n{key}\n"),
+            &format!("api_base=http://10.0.0.5:8080\nrendezvous=lab-.lan\n{key}\n"),
             "api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\nkey=Ok9SZ5+ExasFXnNNw0lW5gg3gAsEr2xpEFenO5gHm2t=\n",
             "api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\nkey=Ok9SZ5+ExasFXnNNw0lW5gg3gAsEr2xpEFenO5gHm2==\n",
             "api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\nkey=Ok9SZ5-ExasFXnNNw0lW5gg3gAsEr2xpEFenO5gHm2s=\n",
@@ -422,6 +456,9 @@ mod tests {
             format!("api_base={LIVE_API_BASE}/\nrendezvous=10.0.0.5\n{key}\n"),
             format!("api_base=http://10.0.0.5:8080\nrendezvous=REMOTE.gesoft.ro\n{key}\n"),
             format!("api_base=http://10.0.0.5:8080\nrendezvous=10.0.0.5\nkey={LIVE_KEY}\n"),
+            format!("api_base=https://HELPDESK.gesoft.ro:443\nrendezvous=10.0.0.5\n{key}\n"),
+            format!("api_base=http://helpdesk.gesoft.ro/x\nrendezvous=10.0.0.5\n{key}\n"),
+            format!("api_base=http://10.0.0.5:8080\nrendezvous=remote.gesoft.ro:21116\n{key}\n"),
         ] {
             assert!(parse_lab_config(&text).is_err(), "accepted: {text:?}");
         }
