@@ -205,6 +205,17 @@ public infrastructure.
   *compiled-in* fallback as public, which is exactly the case this fork
   creates.
 * A unit test was added covering both the public and the compiled-custom case.
+* 2026-11-12: under the `gesoft-support` feature, `load_custom_client()` returns
+  at once. A RustDesk-signed `custom.txt` found beside the executable would
+  otherwise load after `gesoft_support::prepare()` and could replace the
+  support settings it pins (approval, audio, server, key). The support build
+  never ships one.
+
+Known and accepted (2026-11-12, 1.5.3 merge): upstream's
+`flutter/windows/runner/main.cpp` handles `--service-control` before the DLL
+loads, so before `gesoft_support::prepare()`. Its `create-service` needs
+administrator rights, nothing in the support flow calls it, and it grants
+nothing the caller does not already have. Left as upstream ships it.
 
 ### `.gitmodules` and the `libs/hbb_common` gitlink — modified 2026-09-06
 

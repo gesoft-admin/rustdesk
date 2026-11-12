@@ -2518,6 +2518,12 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    // Gesoft support build: the profile pins server, key, approval and audio
+    // (gesoft_support::prepare). A RustDesk-signed custom.txt found beside the
+    // executable, such as one left in a reused extraction directory, would
+    // load after that and could replace them. The support build never ships one.
+    #[cfg(feature = "gesoft-support")]
+    return;
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
