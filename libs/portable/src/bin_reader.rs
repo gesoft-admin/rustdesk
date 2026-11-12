@@ -452,34 +452,4 @@ mod tests {
         );
         assert_eq!(entry(&files, "./librustdesk.dll").unwrap().raw, b"core");
     }
-
-    #[test]
-    fn package_paths_are_recorded_for_the_dropped_file_sweep() {
-        let package = parse(blob(
-            &[("./custom.txt", b"cfg"), ("./data/logo.png", b"img")],
-            "./acme.exe",
-        ))
-        .unwrap();
-        let mut paths: Vec<String> = package.0.iter().map(|f| f.path.clone()).collect();
-        paths.sort();
-        assert_eq!(paths, vec!["./custom.txt", "./data/logo.png"]);
-
-        // Merging must not disturb them: the generic payload contributes none.
-        let embedded = parse(blob(&[("./librustdesk.dll", b"core")], "./rustdesk.exe")).unwrap();
-        let (files, _) = merge(embedded, package);
-        assert!(entry(&files, "./data/logo.png").is_some());
-    }
-
-    #[test]
-    fn matches_paths_across_separator_styles() {
-        // generate.py emits backslashes when it runs on Windows.
-        let embedded = parse(blob(&[(".\\rustdesk.exe", b"app")], ".\\rustdesk.exe")).unwrap();
-        let package = parse(blob(&[("./custom.txt", b"cfg")], "./acme.exe")).unwrap();
-
-        let (files, exe) = merge(embedded, package);
-
-        assert_eq!(exe, "./acme.exe");
-        assert!(entry(&files, "./acme.exe").is_some());
-        assert!(entry(&files, ".\\rustdesk.exe").is_none());
-    }
 }

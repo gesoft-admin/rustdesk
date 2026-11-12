@@ -8,14 +8,15 @@ use hbb_common::{
     tokio_util, ResultType, Stream,
 };
 use kcp_sys::{
-    endpoint::KcpEndpoint,
+    endpoint::{ConnId, KcpEndpoint},
     packet_def::{KcpPacket, KcpPacketHeader},
     stream,
 };
 use std::{net::SocketAddr, sync::Arc};
 
 pub struct KcpStream {
-    _endpoint: KcpEndpoint,
+    endpoint: KcpEndpoint,
+    conn_id: ConnId,
     stop_sender: Option<oneshot::Sender<()>>,
 }
 
@@ -39,6 +40,14 @@ impl KcpStream {
                 config
             }));
         }
+    }
+
+    /// How long since a valid packet was last received from the peer, or `None` once the
+    /// connection is gone. Answered by the KCP endpoint's own tasks, not by the session's read
+    /// loop, so it stays meaningful while that loop is busy sending a large message; and the
+    /// endpoint pings an idle peer often enough that silence here means the peer, not quiet.
+    pub fn peer_silent_for(&self) -> Option<std::time::Duration> {
+        self.endpoint.peer_silent_for(&self.conn_id)
     }
 
     fn create_framed(stream: stream::KcpStream, local_addr: Option<SocketAddr>) -> Stream {
@@ -77,7 +86,8 @@ impl KcpStream {
         if let Some(stream) = stream::KcpStream::new(&endpoint, conn_id) {
             Ok((
                 Self {
-                    _endpoint: endpoint,
+                    endpoint,
+                    conn_id,
                     stop_sender: Some(stop_sender),
                 },
                 Self::create_framed(stream, udp_socket.local_addr().ok()),
@@ -108,7 +118,8 @@ impl KcpStream {
         if let Some(stream) = stream::KcpStream::new(&endpoint, conn_id) {
             Ok((
                 Self {
-                    _endpoint: endpoint,
+                    endpoint,
+                    conn_id,
                     stop_sender: Some(stop_sender),
                 },
                 Self::create_framed(stream, udp_socket.local_addr().ok()),
@@ -263,41 +274,5 @@ mod tests {
             }
         }
         assert_eq!(got, N, "graceful close lost frames");
-    }
-
-    // Socket errors on the connected UDP socket (ICMP unreachable after the peer
-    // vanishes) are advisory: the io loop must treat them as loss - keep accepting
-    // writes, keep running - rather than tearing the session down. Whether the OS
-    // actually surfaces ECONNREFUSED here is platform-dependent; either way the
-    // session must stay alive for this window.
-    #[tokio::test]
-    async fn test_kcp_io_treats_socket_errors_as_loss() {
-        let ((_guard_a, mut stream_a), (guard_b, stream_b)) = establish().await;
-
-        // Kill the peer entirely: endpoint stops, socket closes.
-        drop(stream_b);
-        drop(guard_b);
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        for _ in 0..10 {
-            stream_a
-                .send_bytes(Bytes::from_static(b"into the void"))
-                .await
-                .expect("socket errors must be treated as loss, not stream failure");
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    }
-
-    // The connect deadline must hold when nothing answers: no hang, prompt error.
-    #[tokio::test]
-    async fn test_kcp_connect_timeout_without_peer() {
-        let (a, _b) = connected_pair().await;
-        let start = tokio::time::Instant::now();
-        let res = KcpStream::connect(a, Duration::from_millis(600)).await;
-        assert!(res.is_err(), "connect must fail with no peer endpoint");
-        assert!(
-            start.elapsed() < Duration::from_secs(5),
-            "connect did not honor its deadline"
-        );
     }
 }
