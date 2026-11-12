@@ -21,6 +21,15 @@ pub fn launch() -> Launch {
     gesoft_profile::launch(name)
 }
 
+/// Beside the extracted RustDesk; read by `src/gesoft_support.rs`.
+const LANG_FILE: &str = "gesoft-lang";
+
+/// The page's language, from this download's name (`gesoft_profile::ui_lang`).
+fn ui_lang() -> Option<&'static str> {
+    let path = std::env::current_exe().ok()?;
+    gesoft_profile::ui_lang(path.file_name()?.to_str()?)
+}
+
 /// The lab profile runs only where `lab.conf` is in place; checked before
 /// anything is extracted, so the customer sees one message, not RustDesk's
 /// and the close run's.
@@ -103,6 +112,17 @@ fn run_session(code: &str, profile: &'static Profile) -> Result<(), String> {
         &mut ui,
     )
     .ok_or("Could not extract RustDesk")?;
+    // The page's language, for every process of the session: a file beside
+    // RustDesk reaches the elevated helper too, which does not inherit the
+    // environment. A name without a language removes a file left by an
+    // earlier download.
+    let lang_file = local.join(LANG_FILE);
+    match ui_lang() {
+        Some(lang) => std::fs::write(&lang_file, lang).map_err(|e| e.to_string())?,
+        None => {
+            let _ = std::fs::remove_file(&lang_file);
+        }
+    }
     let brand_dir = local.join(format!("branding-{}", std::process::id()));
     std::fs::create_dir_all(&brand_dir).map_err(|e| e.to_string())?;
     let mut child = Command::new(&payload)
@@ -128,6 +148,7 @@ fn run_session(code: &str, profile: &'static Profile) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
+    let _ = std::fs::remove_file(&lang_file);
     let mut cleanup_errors = Vec::new();
     if let Err(error) = remove_dir_with_retry(&brand_dir) {
         cleanup_errors.push(format!("{}: {error}", brand_dir.display()));

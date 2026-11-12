@@ -1,4 +1,4 @@
-// Modified by Gesoft, 2026-10-02 and 2026-11-11. See CHANGES-GESOFT.md.
+// Modified by Gesoft, 2026-10-02, 2026-11-11 and 2026-11-12. See CHANGES-GESOFT.md.
 
 use std::{path::PathBuf, sync::OnceLock, time::Duration};
 
@@ -13,6 +13,8 @@ const CODE_ENV: &str = "GESOFT_SUPPORT_CODE";
 /// customer restrictions. The technician never elevates, so its helpers all
 /// inherit it; a process without it is treated as a customer's.
 const TECHNICIAN_ENV: &str = "GESOFT_SUPPORT_TECHNICIAN";
+/// Written by the packer beside RustDesk from the download name: `ro` or `en`.
+const LANG_FILE: &str = "gesoft-lang";
 /// Passed by the portable packer once RustDesk has exited: report the
 /// customer's close to the helpdesk and exit, without starting anything.
 pub const CLOSED_ARG: &str = "--gesoft-support-closed";
@@ -94,7 +96,25 @@ fn apply_customer_restrictions() -> Result<(), String> {
     // or the browser viewer.
     overwrite.insert("enable-audio".into(), "N".into());
     overwrite.insert("approve-mode".into(), "click".into());
+    drop(overwrite);
+    // The language the customer read the support page in, which the packer
+    // wrote beside RustDesk from the download name. Every process of the
+    // session, the elevated helper included, reads it, so every window (the
+    // main one, the Accept prompt) speaks it, not the Windows language.
+    // Missing or unknown: RustDesk's own choice.
+    if let Some(lang) = page_lang() {
+        hbb_common::config::OVERWRITE_LOCAL_SETTINGS
+            .write()
+            .map_err(|e| e.to_string())?
+            .insert("lang".into(), lang.into());
+    }
     Ok(())
+}
+
+fn page_lang() -> Option<&'static str> {
+    let exe = std::env::current_exe().ok()?;
+    let lang = std::fs::read_to_string(exe.parent()?.join(LANG_FILE)).ok()?;
+    ["ro", "en"].into_iter().find(|known| lang.trim() == *known)
 }
 
 fn is_technician() -> bool {

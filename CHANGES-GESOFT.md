@@ -54,6 +54,11 @@ lab session or the lab technician, it checks that the test machine's
 `%ProgramData%\GesoftSupportLab\lab.conf` is in place and valid, and stops
 with a message otherwise.
 
+Modified 2026-11-12: it writes the language of the page the customer
+downloaded from (read from the download name, see `gesoft_profile::ui_lang`)
+to `gesoft-lang` beside the extracted RustDesk, and removes it after the
+session; a name without a language removes a file left by an earlier run.
+
 ### `src/gesoft_profile.rs` — added 2026-11-11
 
 The two profiles one build serves, `live` and `lab`: the configuration
@@ -65,6 +70,10 @@ later on 2026-11-11: no lab address is compiled any more, and the name alone
 selects the profile). Compiled into RustDesk and, through
 `#[path]`, into the portable packer; read by the CI marker step. Its tests run
 on any host.
+
+Modified 2026-11-12: `ui_lang` reads the support page's language from the
+download name the Helpdesk gives (`GeSoft-Asistenta-…` Romanian,
+`GeSoft-Remote-Support-…` English, any other name none).
 
 ### `src/gesoft_support.rs` — added 2026-10-02
 
@@ -114,6 +123,12 @@ login, and a file transfer without such a control, still asks for Accept.
 A control on which the customer switched File off in the connection manager is
 not joined (Accept again), and when the last control of a viewer session ends,
 the file transfers of that session are closed with it.
+
+Modified 2026-11-12: a customer's process reads `gesoft-lang` beside it and,
+when it says `ro` or `en`, overrides RustDesk's `lang` local option for the
+process, so the main window and the Accept prompt use the language of the
+support page rather than the Windows language. The elevated helper reads the
+same file. Without the file, or for the technician, RustDesk chooses as before.
 
 ### `src/server/connection.rs` — modified 2026-11-10
 

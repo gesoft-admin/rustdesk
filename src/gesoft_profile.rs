@@ -291,6 +291,21 @@ pub fn launch(name: &str) -> Launch {
     }
 }
 
+/// The language the customer read the support page in, from the download name
+/// the helpdesk gave the file (`GeSoft-Asistenta-…` is Romanian,
+/// `GeSoft-Remote-Support-…` English). Any other name says nothing, and the
+/// client then follows the Windows language as RustDesk does.
+pub fn ui_lang(name: &str) -> Option<&'static str> {
+    let name = name.to_ascii_lowercase();
+    if name.starts_with("gesoft-asistenta-") {
+        Some("ro")
+    } else if name.starts_with("gesoft-remote-support-") {
+        Some("en")
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,5 +477,14 @@ mod tests {
         ] {
             assert!(parse_lab_config(&text).is_err(), "accepted: {text:?}");
         }
+    }
+
+    #[test]
+    fn the_download_name_carries_the_page_language() {
+        assert_eq!(ui_lang("GeSoft-Asistenta-ZVKQ4WGVFA43.exe"), Some("ro"));
+        assert_eq!(ui_lang("GeSoft-Asistenta-Lab-ZVKQ4WGVFA43 (1).exe"), Some("ro"));
+        assert_eq!(ui_lang("GeSoft-Remote-Support-ZVKQ4WGVFA43.exe"), Some("en"));
+        assert_eq!(ui_lang("GeSoftSupport-ZVKQ4WGVFA43.exe"), None);
+        assert_eq!(ui_lang("GesoftSupport.exe"), None);
     }
 }
