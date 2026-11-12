@@ -12,6 +12,12 @@ the complete difference; anything not listed here is upstream's, unmodified.
 
 Modified by **Gesoft** — <https://github.com/gesoft-admin/rustdesk>.
 
+Base: upstream RustDesk 1.5.3 (release commit `09871abd0`, 2026-11-08),
+merged into this fork on 2026-11-12; before that the base was 1.5.0
+(merge-base `dc04b911a`). `hbb_common` was merged at the same time with the
+revision 1.5.3 pins (`fae47e024`). The Gesoft changes below are unchanged in
+substance by that merge, except where a section says so.
+
 ## `rustdesk`
 
 ### `libs/portable/src/gesoft_support.rs` — added 2026-10-02
@@ -123,6 +129,13 @@ transfer can join a control in the brief moment between its close and its
 removal from the list of authorized connections; it is closed as that control
 is dropped. Builds without `gesoft-support` are unchanged.
 
+Modified 2026-11-12 (merge of 1.5.3): upstream now also handles `Close` on that
+channel, to close a connection when another connection takes privacy mode (it
+sends it only to remote controls). Our `Close` arm is placed before it and
+applies only to a file-transfer connection (`conn.file_transfer.is_some()`),
+so a joined file transfer still ends with its control, and a remote control
+still gets upstream's privacy-mode close.
+
 ### `flutter/lib/common.dart`, `flutter/lib/desktop/pages/desktop_home_page.dart`, `flutter/windows/runner/main.cpp` — modified 2026-10-02
 
 These read a runtime display name, accent colour, logo and icon from the
@@ -196,7 +209,10 @@ public infrastructure.
 ### `.gitmodules` and the `libs/hbb_common` gitlink — modified 2026-09-06
 
 The submodule URL points at <https://github.com/gesoft-admin/hbb_common> and
-the gitlink pins a commit on its `support` branch, rather than upstream's. The
+the gitlink pins a commit on its `support` branch, rather than upstream's.
+Since 2026-11-12 that is the merge commit of upstream `fae47e024` (1.5.3's
+pin) into `support` (branch `support-1.5.3`); the merge had no conflicts and
+the three constants below are unchanged. The
 pinned commit for any given build is recorded in the parent tree; see
 `LICENCE-COMPLIANCE.md` for how to read it.
 
