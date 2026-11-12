@@ -1153,6 +1153,14 @@ impl Connection {
                 },
                 Some(data) = rx_from_authed.recv() => {
                     match data {
+                        // The remote control this file transfer joined has ended. Placed before
+                        // the privacy-mode arm below, which only ever targets remote connections.
+                        #[cfg(all(windows, feature = "gesoft-support"))]
+                        ipc::Data::Close if conn.file_transfer.is_some() => {
+                            conn.send_close_reason_no_retry("").await;
+                            conn.on_close("remote control ended", true).await;
+                            break;
+                        }
                         ipc::Data::Close => {
                             conn.send(crate::common::make_privacy_mode_msg(
                                 back_notification::PrivacyModeState::PrvOnByOther,
@@ -1168,13 +1176,6 @@ impl Connection {
                             } else {
                                 conn.send_remote_printing_disallowed().await;
                             }
-                        }
-                        // The remote control this file transfer joined has ended.
-                        #[cfg(all(windows, feature = "gesoft-support"))]
-                        ipc::Data::Close => {
-                            conn.send_close_reason_no_retry("").await;
-                            conn.on_close("remote control ended", true).await;
-                            break;
                         }
                         _ => {}
                     }
